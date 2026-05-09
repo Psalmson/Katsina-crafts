@@ -12,7 +12,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 const SUPABASE_URL = 'https://tngqzkbgppfcshovdbmu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_tjNwrmFH2w5Ds4MQPhnB7w_siwnpnsk';
-const supabase = supabase_js.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 
 /* ─────────────────────────────────────────────────────────
