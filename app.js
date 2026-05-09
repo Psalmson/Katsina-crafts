@@ -1,45 +1,47 @@
 /* ═══════════════════════════════════════════════════════════
    KATSINA CRAFTS — APP.JS
-   POC version: direct table-based auth for artisans
-   Admin uses Supabase Auth
+   POC version: table-based auth for artisans + hardcoded admin
    ═══════════════════════════════════════════════════════════ */
 
 const { useState, useEffect, useRef, useCallback } = React;
 
 /* ─────────────────────────────────────────────────────────
-   SUPABASE CLIENT
+   SUPABASE + ADMIN CONFIG
    ───────────────────────────────────────────────────────── */
 
-const SUPABASE_URL     = 'https://tngqzkbgppfcshovdbmu.supabase.co';
-const SUPABASE_ANON    = 'sb_publishable_tjNwrmFH2w5Ds4MQPhnB7w_siwnpnsk';
+const SUPABASE_URL   = 'https://tngqzkbgppfcshovdbmu.supabase.co';
+const SUPABASE_ANON  = 'sb_publishable_tjNwrmFH2w5Ds4MQPhnB7w_siwnpnsk';
 const ADMIN_EMAIL    = 'admin@katsinacrafts.com';
-const ADMIN_PASSWORD = 'L@)Au.L6995xN2_&*';
-const db               = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const ADMIN_PASSWORD = 'KatsinaAdmin2026!'; // POC only — replace with real auth in production
+const db             = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-/* Simple hash for POC — NOT for production */
+/* Simple SHA-256 hash for POC password storage — NOT for production */
 const simpleHash = async (str) => {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 };
 
-/* Session helpers — store artisan in localStorage for POC */
-const SESSION_KEY = 'kc_artisan_session';
-const saveSession  = (artisan) => localStorage.setItem(SESSION_KEY, JSON.stringify(artisan));
-const clearSession = ()        => localStorage.removeItem(SESSION_KEY);
-const loadSession  = ()        => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } };
+/* Session helpers */
+const SESSION_KEY       = 'kc_artisan_session';
+const ADMIN_SESSION_KEY = 'kc_admin_session';
+const saveArtisanSession = (a) => localStorage.setItem(SESSION_KEY, JSON.stringify(a));
+const saveAdminSession   = ()  => localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ email: ADMIN_EMAIL, role: 'admin' }));
+const clearAllSessions   = ()  => { localStorage.removeItem(SESSION_KEY); localStorage.removeItem(ADMIN_SESSION_KEY); };
+const loadArtisanSession = ()  => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } };
+const loadAdminSession   = ()  => { try { return JSON.parse(localStorage.getItem(ADMIN_SESSION_KEY)); } catch { return null; } };
 
 
 /* ─────────────────────────────────────────────────────────
-   STATIC DATA
+   STATIC SEED DATA
    ───────────────────────────────────────────────────────── */
 
 const SEED_PRODUCTS = [
-  { id:1, name:"Katsina Rattan Armchair", price:185000, category:"Chairs", artisan_name:"Malam Sani Crafts", description:"Hand-woven rattan back with solid wood frame. Inspired by traditional Hausa sitting rooms, this armchair blends comfort with heritage craftsmanship.", img_url:"https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=600&q=80", rating:4.8, review_count:24, is_featured:true, tag:"Best Seller", status:"approved" },
-  { id:2, name:"Daura Lounge Chair", price:142000, category:"Chairs", artisan_name:"Abdullahi Woodworks", description:"Scandinavian-meets-Sahel design. Cane-backed barrel chair with cushioned seat, perfect for modern Nigerian living spaces.", img_url:"https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80", rating:4.6, review_count:18, is_featured:true, tag:"New Arrival", status:"approved" },
-  { id:3, name:"Funtua Round Coffee Table", price:225000, category:"Tables", artisan_name:"Katsina Heritage Furniture", description:"Statement round coffee table with rattan-wrapped drum base and rich walnut top.", img_url:"https://images.unsplash.com/photo-1532372576444-dda954194ad0?w=600&q=80", rating:4.9, review_count:31, is_featured:true, tag:"Editor's Pick", status:"approved" },
-  { id:4, name:"Durbar Sculptural Table", price:198000, category:"Tables", artisan_name:"Malam Sani Crafts", description:"Sculptural walnut coffee table inspired by the flowing forms of Katsina Durbar festival drums.", img_url:"https://images.unsplash.com/photo-1611269154421-4e27233ac5c7?w=600&q=80", rating:4.7, review_count:15, is_featured:false, tag:null, status:"approved" },
-  { id:5, name:"Zango Woven Side Table", price:67000, category:"Tables", artisan_name:"Amina's Rattan Studio", description:"Compact side table featuring hand-woven rattan top on tapered mahogany legs.", img_url:null, rating:4.5, review_count:9, is_featured:false, tag:null, status:"approved" },
-  { id:6, name:"Barkiya Rattan Shelf", price:156000, category:"Storage", artisan_name:"Abdullahi Woodworks", description:"Open shelving unit with rattan panel doors and solid wood frame.", img_url:null, rating:4.4, review_count:12, is_featured:false, tag:null, status:"approved" },
+  { id:1, name:"Katsina Rattan Armchair",    price:185000, category:"Chairs",  artisan_name:"Malam Sani Crafts",         description:"Hand-woven rattan back with solid wood frame. Inspired by traditional Hausa sitting rooms.", img_url:"https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=600&q=80", rating:4.8, review_count:24, is_featured:true,  tag:"Best Seller",   status:"approved" },
+  { id:2, name:"Daura Lounge Chair",         price:142000, category:"Chairs",  artisan_name:"Abdullahi Woodworks",        description:"Scandinavian-meets-Sahel design. Cane-backed barrel chair with cushioned seat.",              img_url:"https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80", rating:4.6, review_count:18, is_featured:true,  tag:"New Arrival",   status:"approved" },
+  { id:3, name:"Funtua Round Coffee Table",  price:225000, category:"Tables",  artisan_name:"Katsina Heritage Furniture", description:"Statement round coffee table with rattan-wrapped drum base and rich walnut top.",              img_url:"https://images.unsplash.com/photo-1532372576444-dda954194ad0?w=600&q=80", rating:4.9, review_count:31, is_featured:true,  tag:"Editor's Pick", status:"approved" },
+  { id:4, name:"Durbar Sculptural Table",    price:198000, category:"Tables",  artisan_name:"Malam Sani Crafts",         description:"Sculptural walnut coffee table inspired by the Katsina Durbar festival drums.",               img_url:"https://images.unsplash.com/photo-1611269154421-4e27233ac5c7?w=600&q=80", rating:4.7, review_count:15, is_featured:false, tag:null,            status:"approved" },
+  { id:5, name:"Zango Woven Side Table",     price:67000,  category:"Tables",  artisan_name:"Amina's Rattan Studio",     description:"Compact side table featuring hand-woven rattan top on tapered mahogany legs.",                img_url:null, rating:4.5, review_count:9,  is_featured:false, tag:null, status:"approved" },
+  { id:6, name:"Barkiya Rattan Shelf",       price:156000, category:"Storage", artisan_name:"Abdullahi Woodworks",        description:"Open shelving unit with rattan panel doors and solid wood frame.",                           img_url:null, rating:4.4, review_count:12, is_featured:false, tag:null, status:"approved" },
 ];
 
 const SEED_ARTISANS = [
@@ -53,8 +55,7 @@ const CATEGORIES = ["All","Chairs","Tables","Storage","Lighting","Decor","Outdoo
 const MARQUEE    = ["Handwoven Rattan","Katsina Heritage","Sustainable Wood","Artisan Crafted","Made in Nigeria","Traditional Patterns","Modern Design","Cultural Pride"];
 const PH_ICONS   = { Chairs:"🪑", Tables:"🪵", Storage:"📦", Lighting:"💡", Decor:"🏺", Outdoor:"🌿" };
 const TAG_CLS    = { "Best Seller":"product-tag--best","New Arrival":"product-tag--new","Editor's Pick":"product-tag--pick","Premium":"product-tag--premium","New":"product-tag--default" };
-
-const fmt = n => "₦" + Number(n).toLocaleString();
+const fmt        = n => "₦" + Number(n).toLocaleString();
 
 
 /* ─────────────────────────────────────────────────────────
@@ -70,14 +71,13 @@ const Icon = {
   Check:  () => <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>,
   Truck:  () => <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#D4C4B0" strokeWidth="1.3" style={{display:'block',margin:'0 auto 14px'}}><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5a2 2 0 0 1-2 2h-1"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
   Back:   () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>,
-  Menu:   () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3D2B1F" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
   User:   () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
   LogOut: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
 };
 
 
 /* ─────────────────────────────────────────────────────────
-   SMALL COMPONENTS
+   SHARED COMPONENTS
    ───────────────────────────────────────────────────────── */
 
 function Stars({ rating, size = 14 }) {
@@ -99,9 +99,8 @@ function Toast({ message, type = 'success', onClose }) {
   return (
     <div style={{
       position:'fixed', bottom:28, right:28, zIndex:9999,
-      background:bg, color:'#fff', padding:'14px 22px',
-      borderRadius:12, fontSize:14, fontWeight:500,
-      boxShadow:'0 8px 24px rgba(0,0,0,0.15)',
+      background:bg, color:'#fff', padding:'14px 22px', borderRadius:12,
+      fontSize:14, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.15)',
       display:'flex', alignItems:'center', gap:12,
       animation:'fadeUp 0.3s ease', maxWidth:380,
     }}>
@@ -116,8 +115,7 @@ function Spinner({ size = 20, color = '#C8913A' }) {
     <span style={{display:'inline-flex',animation:'spin 0.8s linear infinite'}}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round">
-        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" opacity="0.4"/>
-        <path d="M12 2v4"/>
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
       </svg>
     </span>
   );
@@ -155,20 +153,28 @@ function useHashRouter() {
    ───────────────────────────────────────────────────────── */
 
 function AuthModal({ mode, onClose, onArtisanLogin, onAdminLogin, showToast }) {
-  const [tab, setTab]       = useState(mode || 'login');
+  const [tab, setTab]         = useState(mode || 'login');
   const [loading, setLoading] = useState(false);
-  const [loginType, setLoginType] = useState('artisan'); // 'artisan' | 'admin'
-
-  const [login, setLogin] = useState({ email:'', password:'' });
-  const [form, setForm]   = useState({
-    email:'', password:'', confirm_password:'',
-    shop_name:'', owner_name:'', location:'', phone:'', bio:'',
-  });
-
+  const [loginType, setLoginType] = useState('artisan');
+  const [login, setLogin]     = useState({ email:'', password:'' });
+  const [form, setForm]       = useState({ email:'', password:'', confirm_password:'', shop_name:'', owner_name:'', location:'', phone:'', bio:'' });
   const updLogin = (k,v) => setLogin(f => ({...f,[k]:v}));
   const updForm  = (k,v) => setForm(f => ({...f,[k]:v}));
 
-  /* ── ARTISAN LOGIN ── */
+  /* ADMIN LOGIN — hardcoded check, no Supabase Auth */
+  const handleAdminLogin = () => {
+    if (!login.email || !login.password) return showToast('Please fill in all fields', 'error');
+    if (login.email.trim().toLowerCase() !== ADMIN_EMAIL || login.password !== ADMIN_PASSWORD) {
+      return showToast('Invalid admin credentials', 'error');
+    }
+    const adminData = { email: ADMIN_EMAIL, role: 'admin' };
+    saveAdminSession();
+    showToast('Welcome, Admin!', 'success');
+    onAdminLogin(adminData);
+    onClose();
+  };
+
+  /* ARTISAN LOGIN — check against artisans table */
   const handleArtisanLogin = async () => {
     if (!login.email || !login.password) return showToast('Please fill in all fields', 'error');
     setLoading(true);
@@ -178,32 +184,16 @@ function AuthModal({ mode, onClose, onArtisanLogin, onAdminLogin, showToast }) {
       .select('*')
       .eq('email', login.email.toLowerCase().trim())
       .eq('password', hash)
-      .single();
-
+      .maybeSingle();
     setLoading(false);
     if (error || !data) return showToast('Invalid email or password', 'error');
-    saveSession(data);
+    saveArtisanSession(data);
     showToast(`Welcome back, ${data.shop_name}!`, 'success');
     onArtisanLogin(data);
     onClose();
   };
 
-  /* ── ADMIN LOGIN ── */
-  const handleAdminLogin = async () => {
-  if (!login.email || !login.password) return showToast('Please fill in all fields', 'error');
-  if (login.email.trim().toLowerCase() !== ADMIN_EMAIL || login.password !== ADMIN_PASSWORD) {
-    return showToast('Invalid admin credentials', 'error');
-  }
-  setLoading(true);
-  const adminData = { email: ADMIN_EMAIL, role: 'admin' };
-  showToast('Welcome, Admin!', 'success');
-  onAdminLogin(adminData);
-  localStorage.setItem('kc_admin_session', JSON.stringify(adminData));
-  setLoading(false);
-  onClose();
-};
-
-  /* ── ARTISAN SIGNUP ── */
+  /* ARTISAN SIGNUP — insert into artisans table */
   const handleSignup = async () => {
     if (!form.email || !form.password || !form.shop_name || !form.owner_name)
       return showToast('Please fill all required fields', 'error');
@@ -211,15 +201,14 @@ function AuthModal({ mode, onClose, onArtisanLogin, onAdminLogin, showToast }) {
       return showToast('Passwords do not match', 'error');
     if (form.password.length < 6)
       return showToast('Password must be at least 6 characters', 'error');
-
     setLoading(true);
 
-    // Check email not already used
+    // Check if email already exists
     const { data: existing } = await db
       .from('artisans')
       .select('id')
       .eq('email', form.email.toLowerCase().trim())
-      .single();
+      .maybeSingle();
 
     if (existing) { setLoading(false); return showToast('An account with this email already exists', 'error'); }
 
@@ -237,26 +226,18 @@ function AuthModal({ mode, onClose, onArtisanLogin, onAdminLogin, showToast }) {
 
     setLoading(false);
     if (error) return showToast(error.message, 'error');
-    showToast('Application submitted! We\'ll review and get back to you within 2-3 days.', 'success');
+    showToast('Application submitted! We\'ll review and get back to you within 2–3 days.', 'success');
     onClose();
   };
 
-  const inputStyle = {
-    width:'100%', padding:'12px 18px', borderRadius:10,
-    border:'1.5px solid #E0D5C4', fontSize:14,
-    background:'#FFFBF5', color:'#3D2B1F', outline:'none',
-    fontFamily:'inherit', transition:'border-color 0.3s', boxSizing:'border-box',
-  };
-  const labelStyle = {
-    display:'block', fontSize:11, fontWeight:600,
-    color:'#8B7355', letterSpacing:0.8, textTransform:'uppercase', marginBottom:7,
-  };
+  const inputStyle = { width:'100%', padding:'12px 18px', borderRadius:10, border:'1.5px solid #E0D5C4', fontSize:14, background:'#FFFBF5', color:'#3D2B1F', outline:'none', fontFamily:'inherit', transition:'border-color 0.3s', boxSizing:'border-box' };
+  const labelStyle = { display:'block', fontSize:11, fontWeight:600, color:'#8B7355', letterSpacing:0.8, textTransform:'uppercase', marginBottom:7 };
+  const onFocus    = e => e.target.style.borderColor = '#C8913A';
+  const onBlur     = e => e.target.style.borderColor = '#E0D5C4';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" style={{maxWidth:520}} onClick={e => e.stopPropagation()}>
-
-        {/* Tabs */}
         <div style={{padding:'28px 32px 0',borderBottom:'1px solid #F0E6D8',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <div style={{display:'flex'}}>
             {[['login','Log In'],['signup','Join as Artisan']].map(([key,label]) => (
@@ -272,14 +253,11 @@ function AuthModal({ mode, onClose, onArtisanLogin, onAdminLogin, showToast }) {
         </div>
 
         <div style={{padding:'28px 32px 32px'}}>
-
-          {/* LOGIN */}
           {tab === 'login' && (
             <div style={{display:'flex',flexDirection:'column',gap:16}}>
-
               {/* Login type toggle */}
               <div style={{display:'flex',background:'#F5EDE0',borderRadius:10,padding:4,gap:4}}>
-                {[['artisan','Artisan Login'],['admin','Admin Login']].map(([type,label]) => (
+                {[['artisan','Artisan'],['admin','Admin']].map(([type,label]) => (
                   <button key={type} onClick={() => setLoginType(type)} style={{
                     flex:1, padding:'9px 0', borderRadius:8, border:'none',
                     background: loginType===type ? '#fff' : 'transparent',
@@ -287,19 +265,16 @@ function AuthModal({ mode, onClose, onArtisanLogin, onAdminLogin, showToast }) {
                     fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
                     boxShadow: loginType===type ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
                     transition:'all 0.25s',
-                  }}>{label}</button>
+                  }}>{label} Login</button>
                 ))}
               </div>
-
               <div>
                 <label style={labelStyle}>Email</label>
-                <input style={inputStyle} type="email" value={login.email} onChange={e => updLogin('email',e.target.value)} placeholder="your@email.com"
-                  onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'} />
+                <input style={inputStyle} type="email" value={login.email} onChange={e=>updLogin('email',e.target.value)} placeholder="your@email.com" onFocus={onFocus} onBlur={onBlur} />
               </div>
               <div>
                 <label style={labelStyle}>Password</label>
-                <input style={inputStyle} type="password" value={login.password} onChange={e => updLogin('password',e.target.value)} placeholder="••••••••"
-                  onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'}
+                <input style={inputStyle} type="password" value={login.password} onChange={e=>updLogin('password',e.target.value)} placeholder="••••••••" onFocus={onFocus} onBlur={onBlur}
                   onKeyDown={e => e.key==='Enter' && (loginType==='admin' ? handleAdminLogin() : handleArtisanLogin())} />
               </div>
               <button className="btn btn-primary btn-full" style={{padding:'14px',marginTop:4}}
@@ -316,52 +291,41 @@ function AuthModal({ mode, onClose, onArtisanLogin, onAdminLogin, showToast }) {
             </div>
           )}
 
-          {/* SIGNUP */}
           {tab === 'signup' && (
             <div>
-              <p style={{fontSize:13,color:'#8B7355',lineHeight:1.65,marginBottom:22}}>
-                Apply to join Katsina Crafts as a verified artisan. We'll review your application within 2–3 business days.
-              </p>
+              <p style={{fontSize:13,color:'#8B7355',lineHeight:1.65,marginBottom:22}}>Apply to join Katsina Crafts as a verified artisan. We'll review your application within 2–3 business days.</p>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
                 <div style={{gridColumn:'1/-1'}}>
                   <label style={labelStyle}>Email *</label>
-                  <input style={inputStyle} type="email" value={form.email} onChange={e=>updForm('email',e.target.value)} placeholder="your@email.com"
-                    onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'} />
+                  <input style={inputStyle} type="email" value={form.email} onChange={e=>updForm('email',e.target.value)} placeholder="your@email.com" onFocus={onFocus} onBlur={onBlur} />
                 </div>
                 <div>
                   <label style={labelStyle}>Password *</label>
-                  <input style={inputStyle} type="password" value={form.password} onChange={e=>updForm('password',e.target.value)} placeholder="Min. 6 characters"
-                    onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'} />
+                  <input style={inputStyle} type="password" value={form.password} onChange={e=>updForm('password',e.target.value)} placeholder="Min. 6 characters" onFocus={onFocus} onBlur={onBlur} />
                 </div>
                 <div>
                   <label style={labelStyle}>Confirm Password *</label>
-                  <input style={inputStyle} type="password" value={form.confirm_password} onChange={e=>updForm('confirm_password',e.target.value)} placeholder="Repeat password"
-                    onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'} />
+                  <input style={inputStyle} type="password" value={form.confirm_password} onChange={e=>updForm('confirm_password',e.target.value)} placeholder="Repeat password" onFocus={onFocus} onBlur={onBlur} />
                 </div>
                 <div>
                   <label style={labelStyle}>Shop Name *</label>
-                  <input style={inputStyle} value={form.shop_name} onChange={e=>updForm('shop_name',e.target.value)} placeholder="e.g. Sani's Rattan Crafts"
-                    onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'} />
+                  <input style={inputStyle} value={form.shop_name} onChange={e=>updForm('shop_name',e.target.value)} placeholder="e.g. Sani's Rattan Crafts" onFocus={onFocus} onBlur={onBlur} />
                 </div>
                 <div>
                   <label style={labelStyle}>Your Full Name *</label>
-                  <input style={inputStyle} value={form.owner_name} onChange={e=>updForm('owner_name',e.target.value)} placeholder="Full name"
-                    onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'} />
+                  <input style={inputStyle} value={form.owner_name} onChange={e=>updForm('owner_name',e.target.value)} placeholder="Full name" onFocus={onFocus} onBlur={onBlur} />
                 </div>
                 <div>
                   <label style={labelStyle}>Location in Katsina</label>
-                  <input style={inputStyle} value={form.location} onChange={e=>updForm('location',e.target.value)} placeholder="e.g. Katsina City"
-                    onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'} />
+                  <input style={inputStyle} value={form.location} onChange={e=>updForm('location',e.target.value)} placeholder="e.g. Katsina City" onFocus={onFocus} onBlur={onBlur} />
                 </div>
                 <div>
                   <label style={labelStyle}>Phone</label>
-                  <input style={inputStyle} value={form.phone} onChange={e=>updForm('phone',e.target.value)} placeholder="+234..."
-                    onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'} />
+                  <input style={inputStyle} value={form.phone} onChange={e=>updForm('phone',e.target.value)} placeholder="+234..." onFocus={onFocus} onBlur={onBlur} />
                 </div>
                 <div style={{gridColumn:'1/-1'}}>
                   <label style={labelStyle}>Tell Us About Your Craft</label>
-                  <textarea style={{...inputStyle,minHeight:80,resize:'vertical'}} value={form.bio} onChange={e=>updForm('bio',e.target.value)} placeholder="Your craft, experience, inspiration..."
-                    onFocus={e=>e.target.style.borderColor='#C8913A'} onBlur={e=>e.target.style.borderColor='#E0D5C4'} />
+                  <textarea style={{...inputStyle,minHeight:80,resize:'vertical'}} value={form.bio} onChange={e=>updForm('bio',e.target.value)} placeholder="Your craft, experience, inspiration..." onFocus={onFocus} onBlur={onBlur} />
                 </div>
               </div>
               <button className="btn btn-primary btn-full" style={{marginTop:22,padding:'14px'}} onClick={handleSignup} disabled={loading}>
@@ -383,18 +347,13 @@ function AuthModal({ mode, onClose, onArtisanLogin, onAdminLogin, showToast }) {
 function ProductCard({ product, onClick, onAddCart, delay = 0 }) {
   const [imgOk, setImgOk] = useState(true);
   const tagCls = product.tag ? (TAG_CLS[product.tag] || 'product-tag--default') : null;
-
   return (
     <div className="product-card anim-fade-up" style={{animationDelay:delay+'s'}} onClick={() => onClick(product)}>
       <div className="product-img-wrap">
-        {product.img_url && imgOk ? (
-          <img className="product-img" src={product.img_url} alt={product.name} loading="lazy" onError={() => setImgOk(false)} />
-        ) : (
-          <div className="product-placeholder">
-            <span className="product-placeholder-icon">{PH_ICONS[product.category] || '🏠'}</span>
-            <span className="product-placeholder-label">Coming Soon</span>
-          </div>
-        )}
+        {product.img_url && imgOk
+          ? <img className="product-img" src={product.img_url} alt={product.name} loading="lazy" onError={() => setImgOk(false)} />
+          : <div className="product-placeholder"><span className="product-placeholder-icon">{PH_ICONS[product.category]||'🏠'}</span><span className="product-placeholder-label">Coming Soon</span></div>
+        }
         {tagCls && <span className={`product-tag ${tagCls}`}>{product.tag}</span>}
         <button className="product-heart" onClick={e => e.stopPropagation()}><Icon.Heart /></button>
       </div>
@@ -423,16 +382,12 @@ function ProductModal({ product, onClose, onAddCart }) {
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
   if (!product) return null;
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box pm" onClick={e => e.stopPropagation()}>
         <div className="pm-body">
           <div className="pm-img-side">
-            {product.img_url
-              ? <img src={product.img_url} alt={product.name} />
-              : <div className="pm-img-empty">🏠</div>
-            }
+            {product.img_url ? <img src={product.img_url} alt={product.name} /> : <div className="pm-img-empty">🏠</div>}
           </div>
           <div className="pm-details">
             <button className="modal-close" onClick={onClose} style={{position:'absolute',top:16,right:16}}>×</button>
@@ -462,39 +417,25 @@ function ProductModal({ product, onClose, onAddCart }) {
    STOREFRONT
    ───────────────────────────────────────────────────────── */
 
-function Storefront({ onSelectProduct, onAddCart, navigate, onOpenAuth }) {
-  const [products, setProducts]     = useState(SEED_PRODUCTS);
+function Storefront({ onSelectProduct, onAddCart, onOpenAuth }) {
+  const [products, setProducts]           = useState(SEED_PRODUCTS);
   const [activeCategory, setActiveCategory] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy]         = useState('featured');
-  const [loading, setLoading]       = useState(true);
+  const [searchQuery, setSearchQuery]     = useState('');
+  const [sortBy, setSortBy]               = useState('featured');
+  const [loading, setLoading]             = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data } = await db
-        .from('products')
-        .select('*')
-        .eq('status', 'approved')
-        .order('created_at', { ascending: false });
+    (async () => {
+      const { data } = await db.from('products').select('*').eq('status','approved').order('created_at',{ascending:false});
       if (data && data.length > 0) setProducts(data);
       setLoading(false);
-    };
-    fetch();
+    })();
   }, []);
 
   const filtered = products
-    .filter(p => activeCategory === 'All' || p.category === activeCategory)
-    .filter(p => {
-      if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
-      return p.name.toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q) || (p.artisan_name||'').toLowerCase().includes(q);
-    })
-    .sort((a,b) => {
-      if (sortBy === 'price-low')  return a.price - b.price;
-      if (sortBy === 'price-high') return b.price - a.price;
-      if (sortBy === 'rating')     return (b.rating||0) - (a.rating||0);
-      return (b.is_featured?1:0) - (a.is_featured?1:0);
-    });
+    .filter(p => activeCategory==='All' || p.category===activeCategory)
+    .filter(p => { if (!searchQuery) return true; const q=searchQuery.toLowerCase(); return p.name.toLowerCase().includes(q)||(p.description||'').toLowerCase().includes(q)||(p.artisan_name||'').toLowerCase().includes(q); })
+    .sort((a,b) => { if(sortBy==='price-low') return a.price-b.price; if(sortBy==='price-high') return b.price-a.price; if(sortBy==='rating') return (b.rating||0)-(a.rating||0); return (b.is_featured?1:0)-(a.is_featured?1:0); });
 
   return (
     <>
@@ -502,22 +443,16 @@ function Storefront({ onSelectProduct, onAddCart, navigate, onOpenAuth }) {
       <section className="hero rattan-bg">
         <div className="hero-glow" />
         <div className="hero-inner">
-          <div className="hero-badge anim-fade-up">
-            <span className="hero-badge-dot" />
-            <span className="hero-badge-text">From the heart of Northern Nigeria</span>
-          </div>
+          <div className="hero-badge anim-fade-up"><span className="hero-badge-dot" /><span className="hero-badge-text">From the heart of Northern Nigeria</span></div>
           <h1 className="anim-fade-up anim-d1">Where Katsina <em>Heritage</em> Meets Modern Living</h1>
           <p className="hero-sub anim-fade-up anim-d2">Discover handcrafted furniture and home accessories made by skilled artisans from Katsina State. Every piece tells a story of tradition, craftsmanship, and pride.</p>
           <div className="hero-actions anim-fade-up anim-d3">
-            <a href="#shop-section" className="btn btn-primary btn-lg" onClick={() => setTimeout(() => document.getElementById('shop-section')?.scrollIntoView({behavior:'smooth'}), 50)}>Explore Collection</a>
+            <a href="#shop-section" className="btn btn-primary btn-lg" onClick={() => setTimeout(()=>document.getElementById('shop-section')?.scrollIntoView({behavior:'smooth'}),50)}>Explore Collection</a>
             <button className="btn btn-outline btn-lg" onClick={() => onOpenAuth('signup')}>Become an Artisan</button>
           </div>
           <div className="hero-stats anim-fade-up anim-d4">
             {[['120+','Artisan Products'],['34','Local Artisans'],['15k+','Happy Homes']].map(([num,label]) => (
-              <div key={label}>
-                <p className="hero-stat-num">{num}</p>
-                <p className="hero-stat-label">{label}</p>
-              </div>
+              <div key={label}><p className="hero-stat-num">{num}</p><p className="hero-stat-label">{label}</p></div>
             ))}
           </div>
         </div>
@@ -526,9 +461,7 @@ function Storefront({ onSelectProduct, onAddCart, navigate, onOpenAuth }) {
       {/* MARQUEE */}
       <div className="marquee-bar">
         <div className="marquee-track">
-          {[0,1].flatMap(j => MARQUEE.map((w,i) => (
-            <span key={`${j}-${i}`} className="marquee-item"><span className="marquee-dot"/>{w}</span>
-          )))}
+          {[0,1].flatMap(j=>MARQUEE.map((w,i)=><span key={`${j}-${i}`} className="marquee-item"><span className="marquee-dot"/>{w}</span>))}
         </div>
       </div>
 
@@ -539,16 +472,13 @@ function Storefront({ onSelectProduct, onAddCart, navigate, onOpenAuth }) {
           <a href="#" className="view-all">View All <span>→</span></a>
         </div>
         <div className="artisans-grid">
-          {SEED_ARTISANS.map((a,i) => (
+          {SEED_ARTISANS.map((a,i)=>(
             <div key={a.name} className="artisan-card anim-fade-up" style={{animationDelay:i*0.1+'s'}}>
               <div className="artisan-top">
                 <div className="artisan-avatar" style={{background:a.bg}}>{a.name[0]}</div>
                 <div><p className="artisan-name">{a.name}</p><p className="artisan-loc">{a.location}, Katsina</p></div>
               </div>
-              <div className="artisan-bottom">
-                <span className="artisan-count">{a.product_count} products</span>
-                <Stars rating={a.rating} size={11} />
-              </div>
+              <div className="artisan-bottom"><span className="artisan-count">{a.product_count} products</span><Stars rating={a.rating} size={11} /></div>
             </div>
           ))}
         </div>
@@ -556,20 +486,16 @@ function Storefront({ onSelectProduct, onAddCart, navigate, onOpenAuth }) {
 
       {/* SHOP */}
       <section id="shop-section" className="section" style={{paddingTop:48}}>
-        <div className="section-header">
-          <div><p className="section-label">Curated Collection</p><h2 className="section-title">Shop Our Pieces</h2></div>
-        </div>
+        <div className="section-header"><div><p className="section-label">Curated Collection</p><h2 className="section-title">Shop Our Pieces</h2></div></div>
         <div className="filters">
           <div className="search-wrap">
             <span className="search-icon"><Icon.Search /></span>
-            <input className="search-input" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search furniture, artisans..." />
+            <input className="search-input" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search furniture, artisans..." />
           </div>
           <div className="cat-pills">
-            {CATEGORIES.map(c => (
-              <button key={c} className={`cat-pill${activeCategory===c?' active':''}`} onClick={() => setActiveCategory(c)}>{c}</button>
-            ))}
+            {CATEGORIES.map(c=><button key={c} className={`cat-pill${activeCategory===c?' active':''}`} onClick={()=>setActiveCategory(c)}>{c}</button>)}
           </div>
-          <select className="sort-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+          <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
             <option value="featured">Featured</option>
             <option value="price-low">Price: Low → High</option>
             <option value="price-high">Price: High → Low</option>
@@ -577,17 +503,10 @@ function Storefront({ onSelectProduct, onAddCart, navigate, onOpenAuth }) {
           </select>
         </div>
         <p className="results-count">{loading ? 'Loading...' : `${filtered.length} piece${filtered.length!==1?'s':''} found`}</p>
-        {filtered.length > 0 ? (
-          <div className="products-grid">
-            {filtered.map((p,i) => <ProductCard key={p.id} product={p} onClick={onSelectProduct} onAddCart={onAddCart} delay={i*0.06} />)}
-          </div>
-        ) : !loading && (
-          <div className="empty-state">
-            <p className="empty-state-icon">🔍</p>
-            <p className="empty-state-title">No pieces found</p>
-            <p className="empty-state-sub">Try adjusting your search or filters</p>
-          </div>
-        )}
+        {filtered.length > 0
+          ? <div className="products-grid">{filtered.map((p,i)=><ProductCard key={p.id} product={p} onClick={onSelectProduct} onAddCart={onAddCart} delay={i*0.06} />)}</div>
+          : !loading && <div className="empty-state"><p className="empty-state-icon">🔍</p><p className="empty-state-title">No pieces found</p><p className="empty-state-sub">Try adjusting your search or filters</p></div>
+        }
       </section>
 
       {/* HERITAGE */}
@@ -597,16 +516,8 @@ function Storefront({ onSelectProduct, onAddCart, navigate, onOpenAuth }) {
           <h2 className="section-title">Preserving the <em>Rich Craft</em> of Katsina State</h2>
           <p className="heritage-sub">From the ancient city walls of Katsina to the vibrant Durbar festivals, our artisans draw from centuries of creative tradition.</p>
           <div className="heritage-grid">
-            {[['🌿','Sustainably Sourced','Local woods and rattan harvested responsibly from Katsina forests.'],
-              ['🤲','Handcrafted','Every piece made by hand using techniques passed through generations.'],
-              ['🏛️','Cultural Heritage','Designs inspired by Hausa architecture and Katsina\'s artistic legacy.'],
-              ['🚚','Nationwide Delivery','We ship across Nigeria — from Katsina to your doorstep.'],
-            ].map(([icon,title,desc]) => (
-              <div key={title} className="heritage-card">
-                <span className="heritage-card-icon">{icon}</span>
-                <h3 className="heritage-card-title">{title}</h3>
-                <p className="heritage-card-desc">{desc}</p>
-              </div>
+            {[['🌿','Sustainably Sourced','Local woods and rattan harvested responsibly from Katsina forests.'],['🤲','Handcrafted','Every piece made by hand using techniques passed through generations.'],['🏛️','Cultural Heritage','Designs inspired by Hausa architecture and Katsina\'s artistic legacy.'],['🚚','Nationwide Delivery','We ship across Nigeria — from Katsina to your doorstep.']].map(([icon,title,desc])=>(
+              <div key={title} className="heritage-card"><span className="heritage-card-icon">{icon}</span><h3 className="heritage-card-title">{title}</h3><p className="heritage-card-desc">{desc}</p></div>
             ))}
           </div>
         </div>
@@ -635,31 +546,25 @@ function Storefront({ onSelectProduct, onAddCart, navigate, onOpenAuth }) {
    ───────────────────────────────────────────────────────── */
 
 function ArtisanDashboard({ artisan, navigate, showToast }) {
-  const [tab, setTab]           = useState('products');
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [tab, setTab]               = useState('products');
+  const [products, setProducts]     = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [showForm, setShowForm]     = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [imgFile, setImgFile]   = useState(null);
+  const [imgFile, setImgFile]       = useState(null);
   const [imgPreview, setImgPreview] = useState(null);
   const fileRef = useRef();
-
   const [form, setForm] = useState({ name:'', price:'', category:'Chairs', description:'', tag:'' });
-  const upd = (k,v) => setForm(f => ({...f,[k]:v}));
+  const upd = (k,v) => setForm(f=>({...f,[k]:v}));
 
   const fetchProducts = useCallback(async () => {
-    const { data } = await db
-      .from('products')
-      .select('*')
-      .eq('artisan_id', artisan.id)
-      .order('created_at', { ascending: false });
-    setProducts(data || []);
-    setLoading(false);
+    const { data } = await db.from('products').select('*').eq('artisan_id',artisan.id).order('created_at',{ascending:false});
+    setProducts(data||[]); setLoading(false);
   }, [artisan.id]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
-  const handleImageChange = (e) => {
+  const handleImageChange = e => {
     const file = e.target.files[0];
     if (!file) return;
     setImgFile(file);
@@ -670,70 +575,52 @@ function ArtisanDashboard({ artisan, navigate, showToast }) {
     if (!form.name || !form.price) return showToast('Name and price are required', 'error');
     if (artisan.status !== 'approved') return showToast('Your account must be approved before listing products', 'error');
     setSubmitting(true);
-
     let img_url = null;
     if (imgFile) {
-      const ext  = imgFile.name.split('.').pop();
+      const ext = imgFile.name.split('.').pop();
       const path = `${artisan.id}/${Date.now()}.${ext}`;
-      const { error: uploadError } = await db.storage.from('product-images').upload(path, imgFile);
-      if (uploadError) { setSubmitting(false); return showToast('Image upload failed: ' + uploadError.message, 'error'); }
+      const { error: upErr } = await db.storage.from('product-images').upload(path, imgFile);
+      if (upErr) { setSubmitting(false); return showToast('Image upload failed: '+upErr.message, 'error'); }
       const { data: urlData } = db.storage.from('product-images').getPublicUrl(path);
       img_url = urlData.publicUrl;
     }
-
     const { error } = await db.from('products').insert({
-      artisan_id:   artisan.id,
-      artisan_name: artisan.shop_name,
-      name:         form.name,
-      price:        parseInt(form.price),
-      category:     form.category,
-      description:  form.description,
-      tag:          form.tag || null,
-      img_url,
-      status:       'pending',
-      rating:       0,
-      review_count: 0,
-      is_featured:  false,
+      artisan_id: artisan.id, artisan_name: artisan.shop_name,
+      name: form.name, price: parseInt(form.price), category: form.category,
+      description: form.description, tag: form.tag||null, img_url,
+      status: 'pending', rating: 0, review_count: 0, is_featured: false,
     });
-
     setSubmitting(false);
     if (error) return showToast(error.message, 'error');
     showToast('Product submitted for review!', 'success');
     setForm({ name:'', price:'', category:'Chairs', description:'', tag:'' });
-    setImgFile(null); setImgPreview(null);
-    setShowForm(false);
+    setImgFile(null); setImgPreview(null); setShowForm(false);
     fetchProducts();
   };
 
-  const handleDelete = async (id) => {
-    await db.from('products').delete().eq('id', id);
-    showToast('Product removed', 'info');
+  const handleDelete = async id => {
+    await db.from('products').delete().eq('id',id);
+    showToast('Product removed','info');
     fetchProducts();
   };
-
-  const tabs = [['products','My Products'],['shop','Shop Profile'],['orders','Orders'],['analytics','Analytics']];
 
   return (
     <div style={{paddingTop:76,minHeight:'100vh',background:'var(--cream)'}}>
       <div style={{maxWidth:920,margin:'0 auto',padding:'40px 36px 80px'}}>
-        <button onClick={() => navigate('#/')} style={{display:'flex',alignItems:'center',gap:6,color:'var(--saddle)',fontWeight:600,fontSize:14,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:20}}>
+        <button onClick={()=>navigate('#/')} style={{display:'flex',alignItems:'center',gap:6,color:'var(--saddle)',fontWeight:600,fontSize:14,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:20}}>
           <Icon.Back /> Back to Shop
         </button>
 
-        {/* Status banners */}
-        {artisan.status === 'pending' && (
+        {artisan.status==='pending' && (
           <div style={{background:'#FEF3C7',border:'1px solid #F59E0B',borderRadius:12,padding:'14px 20px',marginBottom:24,display:'flex',alignItems:'center',gap:12}}>
             <span style={{fontSize:20}}>⏳</span>
-            <div>
-              <p style={{fontSize:14,fontWeight:600,color:'#92400E',margin:0}}>Application Under Review</p>
-              <p style={{fontSize:13,color:'#B45309',margin:'3px 0 0'}}>Your artisan account is pending approval. You can view your profile but won't be able to list products until approved.</p>
-            </div>
+            <div><p style={{fontSize:14,fontWeight:600,color:'#92400E',margin:0}}>Application Under Review</p><p style={{fontSize:13,color:'#B45309',margin:'3px 0 0'}}>Pending approval. You can view your profile but can't list products yet.</p></div>
           </div>
         )}
-        {artisan.status === 'rejected' && (
+        {artisan.status==='rejected' && (
           <div style={{background:'#FEE2E2',border:'1px solid #EF4444',borderRadius:12,padding:'14px 20px',marginBottom:24}}>
             <p style={{fontSize:14,fontWeight:600,color:'#991B1B',margin:0}}>Application Not Approved</p>
-            <p style={{fontSize:13,color:'#B91C1C',margin:'4px 0 0'}}>Unfortunately your application was not approved. Please contact us for more information.</p>
+            <p style={{fontSize:13,color:'#B91C1C',margin:'4px 0 0'}}>Please contact us for more information.</p>
           </div>
         )}
 
@@ -746,140 +633,76 @@ function ArtisanDashboard({ artisan, navigate, showToast }) {
         </div>
 
         <div className="admin-tabs">
-          {tabs.map(([key,label]) => (
-            <button key={key} className={`admin-tab${tab===key?' active':''}`} onClick={() => setTab(key)}>{label}</button>
+          {[['products','My Products'],['shop','Shop Profile'],['orders','Orders'],['analytics','Analytics']].map(([key,label])=>(
+            <button key={key} className={`admin-tab${tab===key?' active':''}`} onClick={()=>setTab(key)}>{label}</button>
           ))}
         </div>
 
         <div style={{paddingTop:28}}>
-
-          {/* PRODUCTS */}
-          {tab === 'products' && (
+          {tab==='products' && (
             <>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:22}}>
                 <span style={{fontSize:14,color:'var(--warm-gray)'}}>{products.length} products listed</span>
-                {artisan.status === 'approved' && (
-                  <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>+ Add Product</button>
-                )}
+                {artisan.status==='approved' && <button className="btn btn-primary" onClick={()=>setShowForm(!showForm)}>+ Add Product</button>}
               </div>
 
               {showForm && (
                 <div className="new-product-form">
                   <h3>New Product</h3>
                   <div className="form-grid">
-                    <div>
-                      <label className="form-label">Product Name *</label>
-                      <input className="form-input" value={form.name} onChange={e=>upd('name',e.target.value)} placeholder="e.g. Katsina Rattan Chair" />
-                    </div>
-                    <div>
-                      <label className="form-label">Price (₦) *</label>
-                      <input className="form-input" type="number" value={form.price} onChange={e=>upd('price',e.target.value)} placeholder="e.g. 150000" />
-                    </div>
-                    <div>
-                      <label className="form-label">Category</label>
-                      <select className="form-input form-select" value={form.category} onChange={e=>upd('category',e.target.value)}>
-                        {CATEGORIES.filter(c=>c!=='All').map(c=><option key={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="form-label">Tag (optional)</label>
-                      <select className="form-input form-select" value={form.tag} onChange={e=>upd('tag',e.target.value)}>
-                        <option value="">None</option>
-                        <option>New Arrival</option>
-                        <option>Best Seller</option>
-                        <option>Premium</option>
-                      </select>
-                    </div>
-                    <div className="form-full">
-                      <label className="form-label">Description</label>
-                      <textarea className="form-input form-textarea" value={form.description} onChange={e=>upd('description',e.target.value)} placeholder="Describe your product — materials, dimensions, inspiration..." />
-                    </div>
+                    <div><label className="form-label">Product Name *</label><input className="form-input" value={form.name} onChange={e=>upd('name',e.target.value)} placeholder="e.g. Katsina Rattan Chair" /></div>
+                    <div><label className="form-label">Price (₦) *</label><input className="form-input" type="number" value={form.price} onChange={e=>upd('price',e.target.value)} placeholder="e.g. 150000" /></div>
+                    <div><label className="form-label">Category</label><select className="form-input form-select" value={form.category} onChange={e=>upd('category',e.target.value)}>{CATEGORIES.filter(c=>c!=='All').map(c=><option key={c}>{c}</option>)}</select></div>
+                    <div><label className="form-label">Tag (optional)</label><select className="form-input form-select" value={form.tag} onChange={e=>upd('tag',e.target.value)}><option value="">None</option><option>New Arrival</option><option>Best Seller</option><option>Premium</option></select></div>
+                    <div className="form-full"><label className="form-label">Description</label><textarea className="form-input form-textarea" value={form.description} onChange={e=>upd('description',e.target.value)} placeholder="Describe your product — materials, dimensions, inspiration..." /></div>
                     <div className="form-full">
                       <label className="form-label">Product Image</label>
                       <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleImageChange} />
-                      <div className="upload-zone" onClick={() => fileRef.current.click()}>
-                        {imgPreview
-                          ? <img src={imgPreview} alt="preview" style={{height:120,objectFit:'contain',margin:'0 auto',borderRadius:8,display:'block'}} />
-                          : <><Icon.Upload /><p>Click to upload image</p><p className="hint">PNG, JPG up to 5MB</p></>
-                        }
+                      <div className="upload-zone" onClick={()=>fileRef.current.click()}>
+                        {imgPreview ? <img src={imgPreview} alt="preview" style={{height:120,objectFit:'contain',margin:'0 auto',borderRadius:8,display:'block'}} /> : <><Icon.Upload /><p>Click to upload image</p><p className="hint">PNG, JPG up to 5MB</p></>}
                       </div>
                     </div>
                   </div>
                   <div style={{display:'flex',gap:12,marginTop:22,justifyContent:'flex-end'}}>
-                    <button className="btn btn-outline" onClick={() => { setShowForm(false); setImgPreview(null); setImgFile(null); }}>Cancel</button>
-                    <button className="btn btn-rattan" onClick={handleAddProduct} disabled={submitting}>
-                      {submitting ? <Spinner size={16} color="#fff" /> : 'Submit for Review'}
-                    </button>
+                    <button className="btn btn-outline" onClick={()=>{setShowForm(false);setImgPreview(null);setImgFile(null);}}>Cancel</button>
+                    <button className="btn btn-rattan" onClick={handleAddProduct} disabled={submitting}>{submitting?<Spinner size={16} color="#fff"/>:'Submit for Review'}</button>
                   </div>
                 </div>
               )}
 
-              {loading ? (
-                <div style={{textAlign:'center',padding:48}}><Spinner size={32} /></div>
-              ) : products.length === 0 ? (
-                <div className="panel-empty">
-                  <p style={{fontSize:32,opacity:0.15,marginBottom:12}}>📦</p>
-                  <p>No products yet</p>
-                  <p>{artisan.status==='approved' ? 'Click "+ Add Product" to list your first piece.' : 'Once approved, you can start listing your products.'}</p>
-                </div>
-              ) : (
-                products.map(p => (
+              {loading ? <div style={{textAlign:'center',padding:48}}><Spinner size={32}/></div>
+                : products.length===0 ? <div className="panel-empty"><p style={{fontSize:32,opacity:0.15,marginBottom:12}}>📦</p><p>No products yet</p><p>{artisan.status==='approved'?'Click "+ Add Product" to list your first piece.':'Once approved, you can start listing.'}</p></div>
+                : products.map(p=>(
                   <div key={p.id} className="p-row">
-                    <div className="p-row-thumb">
-                      {p.img_url ? <img src={p.img_url} alt="" /> : <span style={{fontSize:20,opacity:0.22}}>🪑</span>}
-                    </div>
-                    <div className="p-row-info">
-                      <p className="p-row-name">{p.name}</p>
-                      <p className="p-row-meta">{p.category} · {fmt(p.price)}</p>
-                    </div>
+                    <div className="p-row-thumb">{p.img_url?<img src={p.img_url} alt=""/>:<span style={{fontSize:20,opacity:0.22}}>🪑</span>}</div>
+                    <div className="p-row-info"><p className="p-row-name">{p.name}</p><p className="p-row-meta">{p.category} · {fmt(p.price)}</p></div>
                     <StatusBadge status={p.status} />
-                    <div className="p-row-actions">
-                      <button className="icon-btn icon-btn--danger" onClick={() => handleDelete(p.id)}><Icon.Trash /></button>
-                    </div>
+                    <div className="p-row-actions"><button className="icon-btn icon-btn--danger" onClick={()=>handleDelete(p.id)}><Icon.Trash /></button></div>
                   </div>
                 ))
-              )}
+              }
             </>
           )}
 
-          {/* SHOP PROFILE */}
-          {tab === 'shop' && (
+          {tab==='shop' && (
             <div>
               <h3 style={{fontFamily:'var(--font-display)',fontSize:20,fontWeight:600,marginBottom:20,color:'var(--earth)'}}>Shop Profile</h3>
               <div className="form-grid">
-                {[['Shop Name',artisan.shop_name],['Owner',artisan.owner_name],['Location',artisan.location],['Phone',artisan.phone],['Email',artisan.email]].map(([label,val]) => (
-                  <div key={label}>
-                    <label className="form-label">{label}</label>
-                    <div style={{padding:'12px 18px',background:'#FAF5ED',borderRadius:10,border:'1px solid #E0D5C4',fontSize:14,color:'var(--earth)'}}>{val||'—'}</div>
-                  </div>
+                {[['Shop Name',artisan.shop_name],['Owner',artisan.owner_name],['Location',artisan.location],['Phone',artisan.phone],['Email',artisan.email]].map(([label,val])=>(
+                  <div key={label}><label className="form-label">{label}</label><div style={{padding:'12px 18px',background:'#FAF5ED',borderRadius:10,border:'1px solid #E0D5C4',fontSize:14,color:'var(--earth)'}}>{val||'—'}</div></div>
                 ))}
-                <div className="form-full">
-                  <label className="form-label">Bio</label>
-                  <div style={{padding:'12px 18px',background:'#FAF5ED',borderRadius:10,border:'1px solid #E0D5C4',fontSize:14,color:'var(--earth)',lineHeight:1.6}}>{artisan.bio||'—'}</div>
-                </div>
+                <div className="form-full"><label className="form-label">Bio</label><div style={{padding:'12px 18px',background:'#FAF5ED',borderRadius:10,border:'1px solid #E0D5C4',fontSize:14,color:'var(--earth)',lineHeight:1.6}}>{artisan.bio||'—'}</div></div>
               </div>
               <p style={{fontSize:12,color:'var(--muted)',marginTop:16}}>To update your shop details, please contact the Katsina Crafts admin team.</p>
             </div>
           )}
 
-          {/* ORDERS */}
-          {tab === 'orders' && (
-            <div className="panel-empty"><Icon.Truck /><p>No orders yet</p><p>Orders will appear here once customers purchase your products</p></div>
-          )}
+          {tab==='orders' && <div className="panel-empty"><Icon.Truck /><p>No orders yet</p><p>Orders will appear here once customers purchase your products</p></div>}
 
-          {/* ANALYTICS */}
-          {tab === 'analytics' && (
+          {tab==='analytics' && (
             <div className="stat-grid">
-              {[
-                ['Products Listed', String(products.length)],
-                ['Approved', String(products.filter(p=>p.status==='approved').length)],
-                ['Pending Review', String(products.filter(p=>p.status==='pending').length)],
-                ['Rejected', String(products.filter(p=>p.status==='rejected').length)],
-              ].map(([label,value]) => (
-                <div key={label} className="stat-card">
-                  <p className="stat-label">{label}</p>
-                  <p className="stat-value">{value}</p>
-                </div>
+              {[['Products Listed',products.length],['Approved',products.filter(p=>p.status==='approved').length],['Pending Review',products.filter(p=>p.status==='pending').length],['Rejected',products.filter(p=>p.status==='rejected').length]].map(([label,val])=>(
+                <div key={label} className="stat-card"><p className="stat-label">{label}</p><p className="stat-value">{val}</p></div>
               ))}
             </div>
           )}
@@ -901,27 +724,25 @@ function AdminPanel({ navigate, showToast }) {
   const [loading, setLoading]   = useState(true);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: a }, { data: p }] = await Promise.all([
-      db.from('artisans').select('*').order('created_at', { ascending: false }),
-      db.from('products').select('*').order('created_at', { ascending: false }),
+    const [{ data:a },{ data:p }] = await Promise.all([
+      db.from('artisans').select('*').order('created_at',{ascending:false}),
+      db.from('products').select('*').order('created_at',{ascending:false}),
     ]);
-    setArtisans(a || []);
-    setProducts(p || []);
-    setLoading(false);
+    setArtisans(a||[]); setProducts(p||[]); setLoading(false);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const updateArtisan = async (id, status) => {
-    const { error } = await db.from('artisans').update({ status }).eq('id', id);
-    if (error) return showToast(error.message, 'error');
+  const updateArtisan = async (id,status) => {
+    const { error } = await db.from('artisans').update({status}).eq('id',id);
+    if (error) return showToast(error.message,'error');
     showToast(`Artisan ${status}`, status==='approved'?'success':'error');
     fetchAll();
   };
 
-  const updateProduct = async (id, status) => {
-    const { error } = await db.from('products').update({ status }).eq('id', id);
-    if (error) return showToast(error.message, 'error');
+  const updateProduct = async (id,status) => {
+    const { error } = await db.from('products').update({status}).eq('id',id);
+    if (error) return showToast(error.message,'error');
     showToast(`Product ${status}`, status==='approved'?'success':'error');
     fetchAll();
   };
@@ -929,16 +750,14 @@ function AdminPanel({ navigate, showToast }) {
   const pending_a = artisans.filter(a=>a.status==='pending');
   const pending_p = products.filter(p=>p.status==='pending');
 
-  const actionBtn = (label, onClick, color) => (
-    <button onClick={onClick} style={{padding:'7px 14px',background:color,color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
-      {label}
-    </button>
+  const actionBtn = (label,onClick,color) => (
+    <button onClick={onClick} style={{padding:'7px 14px',background:color,color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{label}</button>
   );
 
   return (
     <div style={{paddingTop:76,minHeight:'100vh',background:'var(--cream)'}}>
       <div style={{maxWidth:1020,margin:'0 auto',padding:'40px 36px 80px'}}>
-        <button onClick={() => navigate('#/')} style={{display:'flex',alignItems:'center',gap:6,color:'var(--saddle)',fontWeight:600,fontSize:14,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:20}}>
+        <button onClick={()=>navigate('#/')} style={{display:'flex',alignItems:'center',gap:6,color:'var(--saddle)',fontWeight:600,fontSize:14,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:20}}>
           <Icon.Back /> Back to Shop
         </button>
 
@@ -953,68 +772,57 @@ function AdminPanel({ navigate, showToast }) {
           </div>
         </div>
 
-        {/* Quick stats */}
         <div className="stat-grid" style={{marginBottom:32}}>
-          {[['Total Artisans',artisans.length],['Approved Artisans',artisans.filter(a=>a.status==='approved').length],['Total Products',products.length],['Live Products',products.filter(p=>p.status==='approved').length]].map(([label,val]) => (
-            <div key={label} className="stat-card">
-              <p className="stat-label">{label}</p>
-              <p className="stat-value">{val}</p>
-            </div>
+          {[['Total Artisans',artisans.length],['Approved Artisans',artisans.filter(a=>a.status==='approved').length],['Total Products',products.length],['Live Products',products.filter(p=>p.status==='approved').length]].map(([label,val])=>(
+            <div key={label} className="stat-card"><p className="stat-label">{label}</p><p className="stat-value">{val}</p></div>
           ))}
         </div>
 
         <div className="admin-tabs">
-          {[['artisans','Artisans'],['products','Products']].map(([key,label]) => (
-            <button key={key} className={`admin-tab${tab===key?' active':''}`} onClick={() => setTab(key)}>
+          {[['artisans','Artisans'],['products','Products']].map(([key,label])=>(
+            <button key={key} className={`admin-tab${tab===key?' active':''}`} onClick={()=>setTab(key)}>
               {label}
-              {key==='artisans' && pending_a.length>0 && <span style={{marginLeft:6,background:'#F59E0B',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{pending_a.length}</span>}
-              {key==='products' && pending_p.length>0 && <span style={{marginLeft:6,background:'#3B82F6',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{pending_p.length}</span>}
+              {key==='artisans'&&pending_a.length>0&&<span style={{marginLeft:6,background:'#F59E0B',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{pending_a.length}</span>}
+              {key==='products'&&pending_p.length>0&&<span style={{marginLeft:6,background:'#3B82F6',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{pending_p.length}</span>}
             </button>
           ))}
         </div>
 
         <div style={{paddingTop:28}}>
-          {loading ? (
-            <div style={{textAlign:'center',padding:48}}><Spinner size={32} /></div>
-          ) : tab === 'artisans' ? (
-            artisans.length === 0 ? (
-              <div className="panel-empty"><p style={{fontSize:32,opacity:0.15,marginBottom:12}}>👤</p><p>No artisan applications yet</p><p>Applications will appear here when artisans sign up</p></div>
-            ) : artisans.map(a => (
-              <div key={a.id} className="p-row" style={{flexWrap:'wrap',gap:12,alignItems:'flex-start'}}>
-                <div className="artisan-avatar" style={{background:'rgba(200,145,58,0.12)',width:46,height:46,flexShrink:0,fontSize:20}}>{a.shop_name[0]}</div>
-                <div className="p-row-info">
-                  <p className="p-row-name">{a.shop_name}</p>
-                  <p className="p-row-meta">{a.owner_name} · {a.location||'Katsina'} · {a.email}</p>
-                  {a.phone && <p className="p-row-meta">{a.phone}</p>}
-                  {a.bio && <p style={{fontSize:12,color:'var(--warm-gray)',marginTop:4,lineHeight:1.5}}>{a.bio.slice(0,120)}{a.bio.length>120?'...':''}</p>}
+          {loading ? <div style={{textAlign:'center',padding:48}}><Spinner size={32}/></div>
+            : tab==='artisans'
+            ? artisans.length===0
+              ? <div className="panel-empty"><p style={{fontSize:32,opacity:0.15,marginBottom:12}}>👤</p><p>No artisan applications yet</p><p>Applications will appear here when artisans sign up</p></div>
+              : artisans.map(a=>(
+                <div key={a.id} className="p-row" style={{flexWrap:'wrap',gap:12,alignItems:'flex-start'}}>
+                  <div className="artisan-avatar" style={{background:'rgba(200,145,58,0.12)',width:46,height:46,flexShrink:0,fontSize:20}}>{a.shop_name[0]}</div>
+                  <div className="p-row-info">
+                    <p className="p-row-name">{a.shop_name}</p>
+                    <p className="p-row-meta">{a.owner_name} · {a.location||'Katsina'} · {a.email}</p>
+                    {a.phone&&<p className="p-row-meta">{a.phone}</p>}
+                    {a.bio&&<p style={{fontSize:12,color:'var(--warm-gray)',marginTop:4,lineHeight:1.5}}>{a.bio.slice(0,120)}{a.bio.length>120?'...':''}</p>}
+                  </div>
+                  <StatusBadge status={a.status} />
+                  <div className="p-row-actions">
+                    {a.status!=='approved'&&actionBtn('Approve',()=>updateArtisan(a.id,'approved'),'var(--green)')}
+                    {a.status!=='rejected'&&actionBtn('Reject',()=>updateArtisan(a.id,'rejected'),'var(--danger)')}
+                  </div>
                 </div>
-                <StatusBadge status={a.status} />
-                <div className="p-row-actions">
-                  {a.status!=='approved' && actionBtn('Approve', () => updateArtisan(a.id,'approved'), 'var(--green)')}
-                  {a.status!=='rejected' && actionBtn('Reject',  () => updateArtisan(a.id,'rejected'), 'var(--danger)')}
+              ))
+            : products.length===0
+              ? <div className="panel-empty"><p style={{fontSize:32,opacity:0.15,marginBottom:12}}>📦</p><p>No products yet</p><p>Products submitted by artisans will appear here</p></div>
+              : products.map(p=>(
+                <div key={p.id} className="p-row" style={{flexWrap:'wrap',gap:12}}>
+                  <div className="p-row-thumb">{p.img_url?<img src={p.img_url} alt=""/>:<span style={{fontSize:20,opacity:0.22}}>🪑</span>}</div>
+                  <div className="p-row-info"><p className="p-row-name">{p.name}</p><p className="p-row-meta">{p.artisan_name} · {p.category} · {fmt(p.price)}</p></div>
+                  <StatusBadge status={p.status} />
+                  <div className="p-row-actions">
+                    {p.status!=='approved'&&actionBtn('Approve',()=>updateProduct(p.id,'approved'),'var(--green)')}
+                    {p.status!=='rejected'&&actionBtn('Reject',()=>updateProduct(p.id,'rejected'),'var(--danger)')}
+                  </div>
                 </div>
-              </div>
-            ))
-          ) : (
-            products.length === 0 ? (
-              <div className="panel-empty"><p style={{fontSize:32,opacity:0.15,marginBottom:12}}>📦</p><p>No products yet</p><p>Products submitted by artisans will appear here</p></div>
-            ) : products.map(p => (
-              <div key={p.id} className="p-row" style={{flexWrap:'wrap',gap:12}}>
-                <div className="p-row-thumb">
-                  {p.img_url ? <img src={p.img_url} alt="" /> : <span style={{fontSize:20,opacity:0.22}}>🪑</span>}
-                </div>
-                <div className="p-row-info">
-                  <p className="p-row-name">{p.name}</p>
-                  <p className="p-row-meta">{p.artisan_name} · {p.category} · {fmt(p.price)}</p>
-                </div>
-                <StatusBadge status={p.status} />
-                <div className="p-row-actions">
-                  {p.status!=='approved' && actionBtn('Approve', () => updateProduct(p.id,'approved'), 'var(--green)')}
-                  {p.status!=='rejected' && actionBtn('Reject',  () => updateProduct(p.id,'rejected'), 'var(--danger)')}
-                </div>
-              </div>
-            ))
-          )}
+              ))
+          }
         </div>
       </div>
     </div>
@@ -1034,8 +842,6 @@ function Navbar({ route, navigate, cartCount, artisan, adminUser, onOpenAuth, on
     return () => window.removeEventListener('scroll', h);
   }, []);
 
-  const isLoggedIn = artisan || adminUser;
-
   return (
     <nav className={`nav${scrolled?' scrolled':''}`}>
       <div className="nav-inner">
@@ -1048,30 +854,13 @@ function Navbar({ route, navigate, cartCount, artisan, adminUser, onOpenAuth, on
           <a href="#/" className="nav-link">Artisans</a>
           <a href="#/" className="nav-link">Heritage</a>
           <a href="#" className="nav-link">About</a>
-
-          {adminUser && (
-            <button className="btn btn-outline" style={{fontSize:12,padding:'8px 16px'}} onClick={() => navigate('#/admin')}>Admin Panel</button>
-          )}
-          {artisan && (
-            <button className="btn btn-primary" style={{fontSize:12,padding:'8px 16px',display:'flex',alignItems:'center',gap:6}} onClick={() => navigate('#/dashboard')}>
-              <Icon.User /> My Shop
-            </button>
-          )}
-          {isLoggedIn ? (
-            <button onClick={onLogout} style={{display:'flex',alignItems:'center',gap:6,color:'var(--warm-gray)',background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:500}}>
-              <Icon.LogOut /> Log out
-            </button>
-          ) : (
-            <>
-              <button className="btn btn-outline" style={{fontSize:12,padding:'8px 16px'}} onClick={() => onOpenAuth('login')}>Log In</button>
-              <button className="btn btn-primary" onClick={() => onOpenAuth('signup')}>Sell on Katsina</button>
-            </>
-          )}
-
-          <span className="cart-icon">
-            <Icon.Bag />
-            <span className="cart-badge">{cartCount}</span>
-          </span>
+          {adminUser && <button className="btn btn-outline" style={{fontSize:12,padding:'8px 16px'}} onClick={()=>navigate('#/admin')}>Admin Panel</button>}
+          {artisan   && <button className="btn btn-primary" style={{fontSize:12,padding:'8px 16px',display:'flex',alignItems:'center',gap:6}} onClick={()=>navigate('#/dashboard')}><Icon.User /> My Shop</button>}
+          {(artisan||adminUser)
+            ? <button onClick={onLogout} style={{display:'flex',alignItems:'center',gap:6,color:'var(--warm-gray)',background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:500}}><Icon.LogOut /> Log out</button>
+            : <><button className="btn btn-outline" style={{fontSize:12,padding:'8px 16px'}} onClick={()=>onOpenAuth('login')}>Log In</button><button className="btn btn-primary" onClick={()=>onOpenAuth('signup')}>Sell on Katsina</button></>
+          }
+          <span className="cart-icon"><Icon.Bag /><span className="cart-badge">{cartCount}</span></span>
         </div>
       </div>
     </nav>
@@ -1089,30 +878,16 @@ function Footer() {
       <div className="footer-inner">
         <div className="footer-grid">
           <div>
-            <a href="#/" className="nav-logo">
-              <div className="nav-logo-icon" style={{width:36,height:36,fontSize:18}}>K</div>
-              <span className="nav-logo-text" style={{fontSize:20}}>Katsina<em>Crafts</em></span>
-            </a>
-            <p className="footer-brand-desc">Celebrating Katsina's rich heritage through handcrafted furniture and home accessories. Every piece tells a story.</p>
+            <a href="#/" className="nav-logo"><div className="nav-logo-icon" style={{width:36,height:36,fontSize:18}}>K</div><span className="nav-logo-text" style={{fontSize:20}}>Katsina<em>Crafts</em></span></a>
+            <p className="footer-brand-desc">Celebrating Katsina's rich heritage through handcrafted furniture and home accessories.</p>
           </div>
-          <div>
-            <h4 className="footer-col-title">Shop</h4>
-            {['All Products','Chairs','Tables','Storage','Lighting','New Arrivals'].map(l=><a key={l} href="#/" className="footer-link">{l}</a>)}
-          </div>
-          <div>
-            <h4 className="footer-col-title">Artisans</h4>
-            {['Join as Artisan','Artisan Directory','Success Stories','Artisan FAQ'].map(l=><a key={l} href="#" className="footer-link">{l}</a>)}
-          </div>
-          <div>
-            <h4 className="footer-col-title">Help</h4>
-            {['Contact Us','Shipping Info','Returns Policy','Size Guide','Track Order'].map(l=><a key={l} href="#" className="footer-link">{l}</a>)}
-          </div>
+          <div><h4 className="footer-col-title">Shop</h4>{['All Products','Chairs','Tables','Storage','Lighting','New Arrivals'].map(l=><a key={l} href="#/" className="footer-link">{l}</a>)}</div>
+          <div><h4 className="footer-col-title">Artisans</h4>{['Join as Artisan','Artisan Directory','Success Stories','Artisan FAQ'].map(l=><a key={l} href="#" className="footer-link">{l}</a>)}</div>
+          <div><h4 className="footer-col-title">Help</h4>{['Contact Us','Shipping Info','Returns Policy','Size Guide','Track Order'].map(l=><a key={l} href="#" className="footer-link">{l}</a>)}</div>
         </div>
         <div className="footer-bottom">
           <p className="footer-copy">© 2026 Katsina Crafts. Made with pride in Katsina State, Nigeria.</p>
-          <div className="footer-socials">
-            {['Instagram','Twitter','WhatsApp'].map(s=><a key={s} href="#" className="footer-social">{s}</a>)}
-          </div>
+          <div className="footer-socials">{['Instagram','Twitter','WhatsApp'].map(s=><a key={s} href="#" className="footer-social">{s}</a>)}</div>
         </div>
       </div>
     </footer>
@@ -1125,44 +900,34 @@ function Footer() {
    ───────────────────────────────────────────────────────── */
 
 function App() {
-  const { route, navigate }     = useHashRouter();
-  const [artisan, setArtisan]   = useState(loadSession); // artisan from table-based auth
-  const [adminUser, setAdminUser] = useState(null);       // admin from Supabase Auth
-  const [authMode, setAuthMode] = useState(null);
+  const { route, navigate }       = useHashRouter();
+  const [artisan, setArtisan]     = useState(loadArtisanSession);
+  const [adminUser, setAdminUser] = useState(loadAdminSession);
+  const [authMode, setAuthMode]   = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [cartCount, setCartCount] = useState(0);
-  const [toast, setToast]       = useState(null);
+  const [toast, setToast]         = useState(null);
 
   const showToast = useCallback((message, type='success') => {
     setToast({ message, type, id: Date.now() });
   }, []);
 
-  // Restore admin session on load
-  const adminSession = localStorage.getItem('kc_admin_session');
-if (adminSession) setAdminUser(JSON.parse(adminSession));
-
-  const handleLogout = async () => {
-  setAdminUser(null);
-  setArtisan(null);
-  clearSession();
-  localStorage.removeItem('kc_admin_session');
-  navigate('#/');
-  showToast('Logged out successfully');
-};
+  const handleLogout = () => {
+    setArtisan(null);
+    setAdminUser(null);
+    clearAllSessions();
+    navigate('#/');
+    showToast('Logged out successfully');
+  };
 
   useEffect(() => { window.scrollTo(0,0); }, [route]);
 
-  // Route guards
   const isDashboard = route.startsWith('#/dashboard');
   const isAdmin     = route.startsWith('#/admin');
 
   return (
     <>
-      <Navbar
-        route={route} navigate={navigate} cartCount={cartCount}
-        artisan={artisan} adminUser={adminUser}
-        onOpenAuth={setAuthMode} onLogout={handleLogout}
-      />
+      <Navbar route={route} navigate={navigate} cartCount={cartCount} artisan={artisan} adminUser={adminUser} onOpenAuth={setAuthMode} onLogout={handleLogout} />
 
       {isAdmin && adminUser
         ? <AdminPanel navigate={navigate} showToast={showToast} />
@@ -1172,14 +937,14 @@ if (adminSession) setAdminUser(JSON.parse(adminSession));
         ? <ArtisanDashboard artisan={artisan} navigate={navigate} showToast={showToast} />
         : isDashboard && !artisan
         ? (() => { navigate('#/'); setAuthMode('login'); return null; })()
-        : <Storefront onSelectProduct={setSelectedProduct} onAddCart={() => setCartCount(c=>c+1)} navigate={navigate} onOpenAuth={setAuthMode} />
+        : <Storefront onSelectProduct={setSelectedProduct} onAddCart={()=>setCartCount(c=>c+1)} onOpenAuth={setAuthMode} />
       }
 
       <Footer />
 
-      {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onAddCart={() => setCartCount(c=>c+1)} />}
-      {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} onArtisanLogin={setArtisan} onAdminLogin={setAdminUser} showToast={showToast} />}
-      {toast && <Toast key={toast.id} message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {selectedProduct && <ProductModal product={selectedProduct} onClose={()=>setSelectedProduct(null)} onAddCart={()=>setCartCount(c=>c+1)} />}
+      {authMode && <AuthModal mode={authMode} onClose={()=>setAuthMode(null)} onArtisanLogin={setArtisan} onAdminLogin={setAdminUser} showToast={showToast} />}
+      {toast && <Toast key={toast.id} message={toast.message} type={toast.type} onClose={()=>setToast(null)} />}
     </>
   );
 }
