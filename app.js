@@ -12,7 +12,8 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 const SUPABASE_URL     = 'https://tngqzkbgppfcshovdbmu.supabase.co';
 const SUPABASE_ANON    = 'sb_publishable_tjNwrmFH2w5Ds4MQPhnB7w_siwnpnsk';
-const ADMIN_EMAIL      = 'admin@katsinacrafts.com';
+const ADMIN_EMAIL    = 'admin@katsinacrafts.com';
+const ADMIN_PASSWORD = 'L@)Au.L6995xN2_&*';
 const db               = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 /* Simple hash for POC — NOT for production */
@@ -189,19 +190,18 @@ function AuthModal({ mode, onClose, onArtisanLogin, onAdminLogin, showToast }) {
 
   /* ── ADMIN LOGIN ── */
   const handleAdminLogin = async () => {
-    if (!login.email || !login.password) return showToast('Please fill in all fields', 'error');
-    setLoading(true);
-    const { data, error } = await db.auth.signInWithPassword({ email: login.email, password: login.password });
-    setLoading(false);
-    if (error) return showToast(error.message, 'error');
-    if (data.user.email !== ADMIN_EMAIL) {
-      await db.auth.signOut();
-      return showToast('Not authorised as admin', 'error');
-    }
-    showToast('Welcome, Admin!', 'success');
-    onAdminLogin(data.user);
-    onClose();
-  };
+  if (!login.email || !login.password) return showToast('Please fill in all fields', 'error');
+  if (login.email.trim().toLowerCase() !== ADMIN_EMAIL || login.password !== ADMIN_PASSWORD) {
+    return showToast('Invalid admin credentials', 'error');
+  }
+  setLoading(true);
+  const adminData = { email: ADMIN_EMAIL, role: 'admin' };
+  showToast('Welcome, Admin!', 'success');
+  onAdminLogin(adminData);
+  localStorage.setItem('kc_admin_session', JSON.stringify(adminData));
+  setLoading(false);
+  onClose();
+};
 
   /* ── ARTISAN SIGNUP ── */
   const handleSignup = async () => {
@@ -1138,25 +1138,17 @@ function App() {
   }, []);
 
   // Restore admin session on load
-  useEffect(() => {
-    db.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user?.email === ADMIN_EMAIL) setAdminUser(session.user);
-    });
-    const { data: { subscription } } = db.auth.onAuthStateChange((_e, session) => {
-      if (session?.user?.email === ADMIN_EMAIL) setAdminUser(session.user);
-      else setAdminUser(null);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+  const adminSession = localStorage.getItem('kc_admin_session');
+if (adminSession) setAdminUser(JSON.parse(adminSession));
 
   const handleLogout = async () => {
-    if (adminUser) await db.auth.signOut();
-    setAdminUser(null);
-    setArtisan(null);
-    clearSession();
-    navigate('#/');
-    showToast('Logged out successfully');
-  };
+  setAdminUser(null);
+  setArtisan(null);
+  clearSession();
+  localStorage.removeItem('kc_admin_session');
+  navigate('#/');
+  showToast('Logged out successfully');
+};
 
   useEffect(() => { window.scrollTo(0,0); }, [route]);
 
