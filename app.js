@@ -1,188 +1,130 @@
 /* ═══════════════════════════════════════════════════════════
    KATSINA CRAFTS — APP.JS
-   Full Supabase integration: Auth, Artisan approval,
-   Product CRUD with image upload, Admin management
+   Supabase-powered marketplace
+   Views: Storefront · Artisan Dashboard · Admin Panel
    ═══════════════════════════════════════════════════════════ */
 
-const { useState, useEffect, useRef, useCallback, createContext, useContext } = React;
-
+const { useState, useEffect, useRef, useCallback } = React;
 
 /* ─────────────────────────────────────────────────────────
    SUPABASE CLIENT
    ───────────────────────────────────────────────────────── */
 
 const SUPABASE_URL = 'https://tngqzkbgppfcshovdbmu.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRuZ3F6a2JncHBmY3Nob3ZkYm11Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMjY1MzgsImV4cCI6MjA5MjgwMjUzOH0.IwI7BknqYyt1kQ0Vj1smCFJDavVFwBMVc1tuAXxmMi8';
-
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_ANON_KEY = 'sb_publishable_tjNwrmFH2w5Ds4MQPhnB7w_siwnpnsk';
+const supabase = supabase_js.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 
 /* ─────────────────────────────────────────────────────────
-   CONSTANTS
+   STATIC DATA (fallback while DB is empty)
    ───────────────────────────────────────────────────────── */
 
-const CATEGORIES_STATIC = ['All','Chairs','Tables','Storage','Lighting','Decor','Outdoor'];
-const MARQUEE = ['Handwoven Rattan','Katsina Heritage','Sustainable Wood','Artisan Crafted','Made in Nigeria','Traditional Patterns','Modern Design','Cultural Pride'];
-const PLACEHOLDER_ICONS = { Chairs:'🪑', Tables:'🪵', Storage:'📦', Lighting:'💡', Decor:'🏺', Outdoor:'🌿' };
-const TAG_CLASSES = { 'Best Seller':'product-tag--best', 'New Arrival':'product-tag--new', "Editor's Pick":'product-tag--pick', 'Premium':'product-tag--premium', 'New':'product-tag--default' };
-const fmt = n => '₦' + Number(n).toLocaleString();
+const SEED_PRODUCTS = [
+  { id:1, name:"Katsina Rattan Armchair", price:185000, category:"Chairs", artisan_name:"Malam Sani Crafts", description:"Hand-woven rattan back with solid wood frame. Inspired by traditional Hausa sitting rooms, this armchair blends comfort with heritage craftsmanship.", img_url:"https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=600&q=80", rating:4.8, review_count:24, is_featured:true, tag:"Best Seller", status:"approved" },
+  { id:2, name:"Daura Lounge Chair", price:142000, category:"Chairs", artisan_name:"Abdullahi Woodworks", description:"Scandinavian-meets-Sahel design. Cane-backed barrel chair with cushioned seat, perfect for modern Nigerian living spaces.", img_url:"https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80", rating:4.6, review_count:18, is_featured:true, tag:"New Arrival", status:"approved" },
+  { id:3, name:"Funtua Round Coffee Table", price:225000, category:"Tables", artisan_name:"Katsina Heritage Furniture", description:"Statement round coffee table with rattan-wrapped drum base and rich walnut top. Features hidden storage shelf.", img_url:"https://images.unsplash.com/photo-1532372576444-dda954194ad0?w=600&q=80", rating:4.9, review_count:31, is_featured:true, tag:"Editor's Pick", status:"approved" },
+  { id:4, name:"Durbar Sculptural Table", price:198000, category:"Tables", artisan_name:"Malam Sani Crafts", description:"Sculptural walnut coffee table inspired by the flowing forms of Katsina Durbar festival drums. Three-legged organic base.", img_url:"https://images.unsplash.com/photo-1611269154421-4e27233ac5c7?w=600&q=80", rating:4.7, review_count:15, is_featured:false, tag:null, status:"approved" },
+  { id:5, name:"Zango Woven Side Table", price:67000, category:"Tables", artisan_name:"Amina's Rattan Studio", description:"Compact side table featuring hand-woven rattan top on tapered mahogany legs.", img_url:null, rating:4.5, review_count:9, is_featured:false, tag:null, status:"approved" },
+  { id:6, name:"Barkiya Rattan Shelf", price:156000, category:"Storage", artisan_name:"Abdullahi Woodworks", description:"Open shelving unit with rattan panel doors and solid wood frame.", img_url:null, rating:4.4, review_count:12, is_featured:false, tag:null, status:"approved" },
+];
+
+const SEED_ARTISANS = [
+  { name:"Malam Sani Crafts",         location:"Katsina City",  product_count:23, rating:4.8, bg:"rgba(200,145,58,0.12)" },
+  { name:"Abdullahi Woodworks",        location:"Daura",         product_count:18, rating:4.6, bg:"rgba(139,69,19,0.08)"  },
+  { name:"Katsina Heritage Furniture", location:"Funtua",        product_count:31, rating:4.9, bg:"rgba(212,162,78,0.1)"  },
+  { name:"Amina's Rattan Studio",      location:"Malumfashi",    product_count:14, rating:4.5, bg:"rgba(107,68,35,0.08)"  },
+];
+
+const CATEGORIES  = ["All","Chairs","Tables","Storage","Lighting","Decor","Outdoor"];
+const MARQUEE     = ["Handwoven Rattan","Katsina Heritage","Sustainable Wood","Artisan Crafted","Made in Nigeria","Traditional Patterns","Modern Design","Cultural Pride"];
+const PH_ICONS    = { Chairs:"🪑", Tables:"🪵", Storage:"📦", Lighting:"💡", Decor:"🏺", Outdoor:"🌿" };
+const TAG_CLS     = { "Best Seller":"product-tag--best","New Arrival":"product-tag--new","Editor's Pick":"product-tag--pick","Premium":"product-tag--premium","New":"product-tag--default" };
+
+const fmt = n => "₦" + Number(n).toLocaleString();
 
 
 /* ─────────────────────────────────────────────────────────
-   CONTEXT — AUTH & TOAST
-   ───────────────────────────────────────────────────────── */
-
-const AuthContext = createContext(null);
-const ToastContext = createContext(null);
-
-function useAuth() { return useContext(AuthContext); }
-function useToast() { return useContext(ToastContext); }
-
-
-/* ─────────────────────────────────────────────────────────
-   TOAST SYSTEM
-   ───────────────────────────────────────────────────────── */
-
-function ToastProvider({ children }) {
-  const [toasts, setToasts] = useState([]);
-
-  const addToast = useCallback((message, type = 'info') => {
-    const id = Date.now();
-    setToasts(t => [...t, { id, message, type }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000);
-  }, []);
-
-  return (
-    <ToastContext.Provider value={addToast}>
-      {children}
-      <div className="toast-container">
-        {toasts.map(t => (
-          <div key={t.id} className={`toast toast--${t.type}`}>{t.message}</div>
-        ))}
-      </div>
-    </ToastContext.Provider>
-  );
-}
-
-
-/* ─────────────────────────────────────────────────────────
-   AUTH PROVIDER
-   ───────────────────────────────────────────────────────── */
-
-function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [artisan, setArtisan] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const fetchProfile = async (userId) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    setProfile(data);
-    return data;
-  };
-
-  const fetchArtisan = async (userId) => {
-    const { data } = await supabase
-      .from('artisans')
-      .select('*')
-      .eq('profile_id', userId)
-      .single();
-    setArtisan(data);
-    return data;
-  };
-
-  const refreshAuth = async () => {
-    const { data: { user: u } } = await supabase.auth.getUser();
-    setUser(u);
-    if (u) {
-      await fetchProfile(u.id);
-      await fetchArtisan(u.id);
-    } else {
-      setProfile(null);
-      setArtisan(null);
-    }
-  };
-
-  useEffect(() => {
-    refreshAuth().finally(() => setLoading(false));
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user || null);
-      if (session?.user) {
-        // Small delay to allow trigger to create profile
-        setTimeout(async () => {
-          await fetchProfile(session.user.id);
-          await fetchArtisan(session.user.id);
-        }, 500);
-      } else {
-        setProfile(null);
-        setArtisan(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
-    setArtisan(null);
-  };
-
-  const value = { user, profile, artisan, loading, signOut, refreshAuth, fetchArtisan };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-
-/* ─────────────────────────────────────────────────────────
-   SVG ICONS
+   ICONS
    ───────────────────────────────────────────────────────── */
 
 const Icon = {
-  Heart: ({ size=16, stroke='#8B4513' }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+  Heart:  () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B4513" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
   Search: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
-  Bag: () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B5B4E" strokeWidth="1.8"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>,
-  Edit: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B7355" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-  Trash: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C75050" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
-  ImageIcon: () => <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C8913A" strokeWidth="1.4" style={{display:'block',margin:'0 auto 8px'}}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
-  Check: () => <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>,
-  Truck: () => <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#D4C4B0" strokeWidth="1.3" style={{display:'block',margin:'0 auto 14px'}}><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5a2 2 0 0 1-2 2h-1"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
-  Back: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>,
-  User: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  Bag:    () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B5B4E" strokeWidth="1.8"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>,
+  Edit:   () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B7355" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  Trash:  () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C75050" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+  Upload: () => <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#C8913A" strokeWidth="1.5" style={{display:'block',margin:'0 auto 8px'}}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
+  Check:  () => <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>,
+  Truck:  () => <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#D4C4B0" strokeWidth="1.3" style={{display:'block',margin:'0 auto 14px'}}><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5a2 2 0 0 1-2 2h-1"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+  Back:   () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>,
+  Menu:   () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3D2B1F" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
+  Close:  () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3D2B1F" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  Eye:    () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B7355" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+  User:   () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
   LogOut: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
-  Shield: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
-  Menu: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3D2B1F" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
 };
 
 
 /* ─────────────────────────────────────────────────────────
-   STARS COMPONENT
+   SMALL COMPONENTS
    ───────────────────────────────────────────────────────── */
 
 function Stars({ rating, size = 14 }) {
   return (
     <span className="stars">
       {[1,2,3,4,5].map(i => (
-        <svg key={i} width={size} height={size} viewBox="0 0 20 20" fill={i <= Math.round(rating) ? '#C8913A' : '#E0D5C4'}>
+        <svg key={i} width={size} height={size} viewBox="0 0 20 20" fill={i <= Math.round(rating) ? "#C8913A" : "#E0D5C4"}>
           <polygon points="10,1.5 12.5,7 18.5,7.5 14,11.5 15.5,17.5 10,14 4.5,17.5 6,11.5 1.5,7.5 7.5,7"/>
         </svg>
       ))}
-      <span className="stars-num">{Number(rating).toFixed(1)}</span>
+      <span className="stars-num">{rating}</span>
     </span>
   );
 }
 
-function StatusBadge({ status }) {
+function Toast({ message, type = 'success', onClose }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 4000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+
+  const bg = type === 'success' ? '#2D5016' : type === 'error' ? '#C75050' : '#C8913A';
   return (
-    <span className={`badge badge--${status}`}>
-      <span className="badge-dot" />
-      {status}
+    <div style={{
+      position:'fixed', bottom:28, right:28, zIndex:9999,
+      background:bg, color:'#fff',
+      padding:'14px 22px', borderRadius:12,
+      fontSize:14, fontWeight:500,
+      boxShadow:'0 8px 24px rgba(0,0,0,0.15)',
+      display:'flex', alignItems:'center', gap:12,
+      animation:'fadeUp 0.3s ease',
+      maxWidth:360,
+    }}>
+      <span style={{flex:1}}>{message}</span>
+      <button onClick={onClose} style={{background:'none',border:'none',color:'#fff',cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
+    </div>
+  );
+}
+
+function Spinner({ size = 20, color = '#C8913A' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{animation:'spin 0.8s linear infinite'}}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    pending:  { bg:'#FEF3C7', color:'#92400E', label:'Pending Review' },
+    approved: { bg:'#D1FAE5', color:'#065F46', label:'Approved' },
+    rejected: { bg:'#FEE2E2', color:'#991B1B', label:'Rejected' },
+  };
+  const s = map[status] || map.pending;
+  return (
+    <span style={{padding:'4px 12px',borderRadius:20,fontSize:11,fontWeight:600,background:s.bg,color:s.color,letterSpacing:0.5}}>
+      {s.label}
     </span>
   );
 }
@@ -205,211 +147,176 @@ function useHashRouter() {
 
 
 /* ─────────────────────────────────────────────────────────
-   AUTH MODAL
+   AUTH MODAL — Login / Signup
    ───────────────────────────────────────────────────────── */
 
-function AuthModal({ onClose, initialMode = 'login' }) {
-  const [mode, setMode] = useState(initialMode);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState('buyer');
-  const [error, setError] = useState('');
+function AuthModal({ mode, onClose, onSuccess, showToast }) {
+  const [tab, setTab]         = useState(mode || 'login');
   const [loading, setLoading] = useState(false);
-  const toast = useToast();
+  const [form, setForm]       = useState({
+    email:'', password:'', confirm_password:'',
+    shop_name:'', owner_name:'', location:'', phone:'', bio:'',
+  });
 
-  const handleSubmit = async () => {
-    setError('');
+  const upd = (k, v) => setForm(f => ({...f, [k]: v}));
+
+  const handleLogin = async () => {
+    if (!form.email || !form.password) return showToast('Please fill in all fields', 'error');
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
+    setLoading(false);
+    if (error) return showToast(error.message, 'error');
+    showToast('Welcome back!', 'success');
+    onSuccess(data.user);
+    onClose();
+  };
+
+  const handleSignup = async () => {
+    if (!form.email || !form.password || !form.shop_name || !form.owner_name) return showToast('Please fill all required fields', 'error');
+    if (form.password !== form.confirm_password) return showToast('Passwords do not match', 'error');
+    if (form.password.length < 6) return showToast('Password must be at least 6 characters', 'error');
     setLoading(true);
 
-    try {
-      if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        toast('Welcome back!', 'success');
-        onClose();
-      } else {
-        if (!fullName.trim()) { setError('Please enter your full name'); setLoading(false); return; }
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { full_name: fullName, role } }
-        });
-        if (error) throw error;
-        toast('Account created! Check your email to confirm.', 'success');
-        onClose();
-      }
-    } catch (err) {
-      setError(err.message);
-    }
+    // 1. Create auth user
+    const { data, error } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.password,
+      options: { data: { shop_name: form.shop_name, owner_name: form.owner_name, role: 'artisan' } }
+    });
+
+    if (error) { setLoading(false); return showToast(error.message, 'error'); }
+
+    // 2. Create artisan profile
+    const { error: profileError } = await supabase.from('artisans').insert({
+      user_id:    data.user.id,
+      email:      form.email,
+      shop_name:  form.shop_name,
+      owner_name: form.owner_name,
+      location:   form.location,
+      phone:      form.phone,
+      bio:        form.bio,
+      status:     'pending',
+    });
+
     setLoading(false);
+    if (profileError) return showToast(profileError.message, 'error');
+
+    showToast('Application submitted! We\'ll review your shop and get back to you.', 'success');
+    onClose();
+  };
+
+  const inputStyle = {
+    width:'100%', padding:'12px 18px',
+    borderRadius:10, border:'1.5px solid #E0D5C4',
+    fontSize:14, background:'#FFFBF5', color:'#3D2B1F',
+    outline:'none', fontFamily:'inherit',
+    transition:'border-color 0.3s',
+    boxSizing:'border-box',
+  };
+  const labelStyle = {
+    display:'block', fontSize:11, fontWeight:600,
+    color:'#8B7355', letterSpacing:0.8,
+    textTransform:'uppercase', marginBottom:7,
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box auth-modal" onClick={e => e.stopPropagation()}>
-        <div className="auth-inner">
-          <button className="modal-close" onClick={onClose} style={{position:'absolute',top:16,right:16}}>×</button>
+      <div className="modal-box" style={{maxWidth:520}} onClick={e => e.stopPropagation()}>
+        <div style={{padding:'28px 32px 0',borderBottom:'1px solid #F0E6D8',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{display:'flex',gap:0}}>
+            {['login','signup'].map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                padding:'14px 24px', background:'none', border:'none',
+                borderBottom: tab === t ? '2px solid #C8913A' : '2px solid transparent',
+                color: tab === t ? '#8B4513' : '#B8956A',
+                fontSize:14, fontWeight:600, cursor:'pointer',
+                fontFamily:'inherit', transition:'all 0.3s',
+              }}>
+                {t === 'login' ? 'Log In' : 'Join as Artisan'}
+              </button>
+            ))}
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
 
-          <div className="auth-header">
-            <div className="nav-logo" style={{justifyContent:'center',marginBottom:16}}>
-              <div className="nav-logo-icon">K</div>
+        <div style={{padding:'28px 32px 32px'}}>
+          {tab === 'login' && (
+            <div style={{display:'flex',flexDirection:'column',gap:16}}>
+              <div>
+                <label style={labelStyle}>Email</label>
+                <input style={inputStyle} type="email" value={form.email} onChange={e => upd('email', e.target.value)} placeholder="your@email.com"
+                  onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'} />
+              </div>
+              <div>
+                <label style={labelStyle}>Password</label>
+                <input style={inputStyle} type="password" value={form.password} onChange={e => upd('password', e.target.value)} placeholder="••••••••"
+                  onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'}
+                  onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+              </div>
+              <button className="btn btn-primary btn-full" style={{marginTop:8,padding:'14px'}} onClick={handleLogin} disabled={loading}>
+                {loading ? <Spinner size={18} color="#fff" /> : 'Log In'}
+              </button>
+              <p style={{textAlign:'center',fontSize:13,color:'#B8956A',margin:0}}>
+                Want to sell? <button onClick={() => setTab('signup')} style={{background:'none',border:'none',color:'#8B4513',fontWeight:600,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Apply as an artisan →</button>
+              </p>
             </div>
-            <h2 className="auth-title">{mode === 'login' ? 'Welcome Back' : 'Join Katsina Crafts'}</h2>
-            <p className="auth-subtitle">{mode === 'login' ? 'Sign in to your account' : 'Create your account to get started'}</p>
-          </div>
-
-          {error && <div className="auth-error">{error}</div>}
-
-          {mode === 'signup' && (
-            <>
-              <div className="auth-role-select">
-                <button className={`auth-role-btn${role === 'buyer' ? ' active' : ''}`} onClick={() => setRole('buyer')}>
-                  🛒 Buyer
-                  <small>Browse & purchase</small>
-                </button>
-                <button className={`auth-role-btn${role === 'artisan' ? ' active' : ''}`} onClick={() => setRole('artisan')}>
-                  🤲 Artisan
-                  <small>Sell your crafts</small>
-                </button>
-              </div>
-              <div style={{marginBottom:16}}>
-                <label className="form-label">Full Name</label>
-                <input className="form-input" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your full name" />
-              </div>
-            </>
           )}
 
-          <div style={{marginBottom:16}}>
-            <label className="form-label">Email</label>
-            <input className="form-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
-          </div>
-
-          <div style={{marginBottom:24}}>
-            <label className="form-label">Password</label>
-            <input className="form-input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={mode === 'signup' ? 'Min 6 characters' : '••••••••'} />
-          </div>
-
-          <button className="btn btn-primary btn-lg btn-full" onClick={handleSubmit} disabled={loading}>
-            {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
-          </button>
-
-          <div className="auth-toggle">
-            {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}
-            <button onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>
-              {mode === 'login' ? 'Sign up' : 'Sign in'}
-            </button>
-          </div>
+          {tab === 'signup' && (
+            <div>
+              <p style={{fontSize:13,color:'#8B7355',lineHeight:1.65,marginBottom:22}}>
+                Apply to join Katsina Crafts as a verified artisan. We'll review your application and get back to you within 2–3 business days.
+              </p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+                <div style={{gridColumn:'1/-1'}}>
+                  <label style={labelStyle}>Email *</label>
+                  <input style={inputStyle} type="email" value={form.email} onChange={e => upd('email', e.target.value)} placeholder="your@email.com"
+                    onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Password *</label>
+                  <input style={inputStyle} type="password" value={form.password} onChange={e => upd('password', e.target.value)} placeholder="Min. 6 characters"
+                    onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Confirm Password *</label>
+                  <input style={inputStyle} type="password" value={form.confirm_password} onChange={e => upd('confirm_password', e.target.value)} placeholder="Repeat password"
+                    onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Shop Name *</label>
+                  <input style={inputStyle} value={form.shop_name} onChange={e => upd('shop_name', e.target.value)} placeholder="e.g. Sani's Rattan Crafts"
+                    onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Your Full Name *</label>
+                  <input style={inputStyle} value={form.owner_name} onChange={e => upd('owner_name', e.target.value)} placeholder="Full name"
+                    onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Location in Katsina</label>
+                  <input style={inputStyle} value={form.location} onChange={e => upd('location', e.target.value)} placeholder="e.g. Katsina City"
+                    onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Phone</label>
+                  <input style={inputStyle} value={form.phone} onChange={e => upd('phone', e.target.value)} placeholder="+234..."
+                    onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'} />
+                </div>
+                <div style={{gridColumn:'1/-1'}}>
+                  <label style={labelStyle}>Tell Us About Your Craft</label>
+                  <textarea style={{...inputStyle,minHeight:80,resize:'vertical'}} value={form.bio} onChange={e => upd('bio', e.target.value)} placeholder="Your craft, experience, inspiration..."
+                    onFocus={e => e.target.style.borderColor='#C8913A'} onBlur={e => e.target.style.borderColor='#E0D5C4'} />
+                </div>
+              </div>
+              <button className="btn btn-primary btn-full" style={{marginTop:22,padding:'14px'}} onClick={handleSignup} disabled={loading}>
+                {loading ? <Spinner size={18} color="#fff" /> : 'Submit Application'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
-  );
-}
-
-
-/* ─────────────────────────────────────────────────────────
-   USER MENU (dropdown)
-   ───────────────────────────────────────────────────────── */
-
-function UserMenu({ navigate }) {
-  const { user, profile, artisan, signOut } = useAuth();
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, []);
-
-  if (!user) return null;
-
-  const initials = (profile?.full_name || user.email || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-  const isAdmin = profile?.role === 'admin';
-  const isArtisan = profile?.role === 'artisan';
-
-  return (
-    <div className="user-menu-wrap" ref={ref}>
-      <button className="user-avatar-btn" onClick={() => setOpen(!open)}>{initials}</button>
-      {open && (
-        <div className="user-dropdown">
-          <div style={{padding:'10px 14px 8px',borderBottom:'1px solid var(--border)'}}>
-            <p style={{fontSize:13,fontWeight:600,color:'var(--earth)'}}>{profile?.full_name || 'User'}</p>
-            <p style={{fontSize:11,color:'var(--muted)',marginTop:2}}>{user.email}</p>
-            {profile?.role && <StatusBadge status={profile.role} />}
-          </div>
-
-          {isArtisan && (
-            <button className="user-dropdown-item" onClick={() => { navigate('#/dashboard'); setOpen(false); }}>
-              <Icon.User /> My Dashboard
-            </button>
-          )}
-          {isAdmin && (
-            <button className="user-dropdown-item" onClick={() => { navigate('#/admin'); setOpen(false); }}>
-              <Icon.Shield /> Admin Panel
-            </button>
-          )}
-          <div className="user-dropdown-divider" />
-          <button className="user-dropdown-item user-dropdown-item--danger" onClick={() => { signOut(); setOpen(false); }}>
-            <Icon.LogOut /> Sign Out
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-/* ─────────────────────────────────────────────────────────
-   NAVBAR
-   ───────────────────────────────────────────────────────── */
-
-function Navbar({ route, navigate, cartCount, onAuthClick }) {
-  const { user, profile } = useAuth();
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const h = () => setScrolled(window.scrollY > 30);
-    window.addEventListener('scroll', h, { passive: true });
-    return () => window.removeEventListener('scroll', h);
-  }, []);
-
-  return (
-    <nav className={`nav${scrolled ? ' scrolled' : ''}`}>
-      <div className="nav-inner">
-        <a href="#/" className="nav-logo">
-          <div className="nav-logo-icon">K</div>
-          <span className="nav-logo-text">Katsina<em>Crafts</em></span>
-        </a>
-        <div className="nav-links">
-          <a href="#/" className="nav-link">Shop</a>
-          <a href="#" className="nav-link">Artisans</a>
-          <a href="#" className="nav-link">Heritage</a>
-
-          {!user ? (
-            <>
-              <button className="btn btn-outline" onClick={() => onAuthClick('login')}>Sign In</button>
-              <button className="btn btn-primary" onClick={() => onAuthClick('signup')}>Get Started</button>
-            </>
-          ) : (
-            <>
-              {profile?.role === 'artisan' && (
-                <button className="btn btn-primary" onClick={() => navigate('#/dashboard')}>Dashboard</button>
-              )}
-              {profile?.role === 'admin' && (
-                <button className="btn btn-primary" onClick={() => navigate('#/admin')}>Admin</button>
-              )}
-              <UserMenu navigate={navigate} />
-            </>
-          )}
-
-          <span className="cart-icon">
-            <Icon.Bag />
-            <span className="cart-badge">{cartCount}</span>
-          </span>
-        </div>
-      </div>
-    </nav>
   );
 }
 
@@ -420,30 +327,27 @@ function Navbar({ route, navigate, cartCount, onAuthClick }) {
 
 function ProductCard({ product, onClick, onAddCart, delay = 0 }) {
   const [imgOk, setImgOk] = useState(true);
-  const imgUrl = product.primary_image_url || product.img;
-  const catName = product.category_name || product.category;
-  const artName = product.artisan_name || product.artisan;
-  const tagCls = product.tag ? (TAG_CLASSES[product.tag] || 'product-tag--default') : null;
+  const tagCls = product.tag ? (TAG_CLS[product.tag] || 'product-tag--default') : null;
+  const imgSrc = product.img_url || product.img;
 
   return (
     <div className="product-card anim-fade-up" style={{animationDelay: delay+'s'}} onClick={() => onClick(product)}>
       <div className="product-img-wrap">
-        {imgUrl && imgOk ? (
-          <img className="product-img" src={imgUrl} alt={product.name} loading="lazy" onError={() => setImgOk(false)} />
+        {imgSrc && imgOk ? (
+          <img className="product-img" src={imgSrc} alt={product.name} loading="lazy" onError={() => setImgOk(false)} />
         ) : (
           <div className="product-placeholder">
-            <span className="product-placeholder-icon">{PLACEHOLDER_ICONS[catName] || '🏠'}</span>
+            <span className="product-placeholder-icon">{PH_ICONS[product.category] || '🏠'}</span>
             <span className="product-placeholder-label">Coming Soon</span>
           </div>
         )}
         {tagCls && <span className={`product-tag ${tagCls}`}>{product.tag}</span>}
-        {product.is_featured && !product.tag && <span className="product-tag product-tag--pick">Featured</span>}
         <button className="product-heart" onClick={e => e.stopPropagation()}><Icon.Heart /></button>
       </div>
       <div className="product-info">
-        <p className="product-artisan">{artName}</p>
+        <p className="product-artisan">{product.artisan_name}</p>
         <h3 className="product-name">{product.name}</h3>
-        <Stars rating={product.rating || 0} size={12} />
+        {product.rating > 0 && <Stars rating={product.rating} size={12} />}
         <div className="product-bottom">
           <span className="product-price">{fmt(product.price)}</span>
           <button className="btn-cart-sm" onClick={e => { e.stopPropagation(); onAddCart(product); }}>Add to Cart</button>
@@ -459,39 +363,38 @@ function ProductCard({ product, onClick, onAddCart, delay = 0 }) {
    ───────────────────────────────────────────────────────── */
 
 function ProductModal({ product, onClose, onAddCart }) {
-  if (!product) return null;
-  const imgUrl = product.primary_image_url || product.img;
-  const catName = product.category_name || product.category;
-  const artName = product.artisan_name || product.artisan;
-
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
+  if (!product) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box pm" onClick={e => e.stopPropagation()}>
         <div className="pm-body">
           <div className="pm-img-side">
-            {imgUrl ? <img src={imgUrl} alt={product.name} /> : <div className="pm-img-empty">🏠</div>}
+            {(product.img_url || product.img)
+              ? <img src={product.img_url || product.img} alt={product.name} />
+              : <div className="pm-img-empty">🏠</div>
+            }
           </div>
           <div className="pm-details">
-            <button className="modal-close" onClick={onClose} style={{position:'absolute',top:16,right:16,zIndex:10}}>×</button>
-            <p className="pm-artisan">{artName}</p>
+            <button className="modal-close" onClick={onClose} style={{position:'absolute',top:16,right:16}}>×</button>
+            <p className="pm-artisan">{product.artisan_name}</p>
             <h2 className="pm-name">{product.name}</h2>
-            <span><Stars rating={product.rating || 0} /><span className="pm-reviews">({product.review_count || 0} reviews)</span></span>
+            {product.rating > 0 && <span><Stars rating={product.rating} /><span className="pm-reviews">({product.review_count} reviews)</span></span>}
             <p className="pm-price">{fmt(product.price)}</p>
             <p className="pm-desc">{product.description}</p>
             <div className="pm-tags">
-              <span className="pm-tag">{catName}</span>
+              <span className="pm-tag">{product.category}</span>
               <span className="pm-tag">Handcrafted</span>
               <span className="pm-tag">Made in Katsina</span>
             </div>
             <div className="pm-actions">
               <button className="pm-btn-cart" onClick={() => { onAddCart(product); onClose(); }}>Add to Cart</button>
-              <button className="pm-btn-wish"><Icon.Heart size={18} stroke="#C8913A" /></button>
+              <button className="pm-btn-wish"><Icon.Heart /></button>
             </div>
           </div>
         </div>
@@ -505,59 +408,41 @@ function ProductModal({ product, onClose, onAddCart }) {
    STOREFRONT VIEW
    ───────────────────────────────────────────────────────── */
 
-function Storefront({ navigate, onSelectProduct, onAddCart, onAuthClick }) {
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [artisans, setArtisans] = useState([]);
+function Storefront({ onSelectProduct, onAddCart, navigate, onOpenAuth }) {
+  const [products, setProducts]         = useState(SEED_PRODUCTS);
   const [activeCategory, setActiveCategory] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('featured');
-  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery]   = useState('');
+  const [sortBy, setSortBy]             = useState('featured');
+  const [loading, setLoading]           = useState(true);
 
   useEffect(() => {
-    loadData();
+    const fetch = async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('*, artisans(shop_name)')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false });
+
+      if (data && data.length > 0) {
+        const mapped = data.map(p => ({ ...p, artisan_name: p.artisans?.shop_name || 'Katsina Artisan' }));
+        setProducts(mapped);
+      }
+      setLoading(false);
+    };
+    fetch();
   }, []);
 
-  const loadData = async () => {
-    setLoading(true);
-
-    // Fetch approved products with artisan + category info
-    const { data: prods } = await supabase
-      .from('products_full')
-      .select('*')
-      .eq('status', 'approved');
-
-    // Fetch categories
-    const { data: cats } = await supabase
-      .from('categories')
-      .select('*')
-      .order('sort_order');
-
-    // Fetch approved artisans
-    const { data: arts } = await supabase
-      .from('artisans')
-      .select('*, profiles(full_name)')
-      .eq('status', 'approved');
-
-    setProducts(prods || []);
-    setCategories(cats || []);
-    setArtisans(arts || []);
-    setLoading(false);
-  };
-
-  const catNames = ['All', ...(categories.map(c => c.name))];
-
   const filtered = products
-    .filter(p => activeCategory === 'All' || p.category_name === activeCategory)
+    .filter(p => activeCategory === 'All' || p.category === activeCategory)
     .filter(p => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
-      return p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q) || (p.artisan_name || '').toLowerCase().includes(q);
+      return p.name.toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q) || (p.artisan_name||'').toLowerCase().includes(q);
     })
-    .sort((a, b) => {
-      if (sortBy === 'price-low') return a.price - b.price;
+    .sort((a,b) => {
+      if (sortBy === 'price-low')  return a.price - b.price;
       if (sortBy === 'price-high') return b.price - a.price;
-      if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
+      if (sortBy === 'rating')     return (b.rating||0) - (a.rating||0);
       return (b.is_featured ? 1 : 0) - (a.is_featured ? 1 : 0);
     });
 
@@ -575,11 +460,14 @@ function Storefront({ navigate, onSelectProduct, onAddCart, onAuthClick }) {
           <p className="hero-sub anim-fade-up anim-d2">Discover handcrafted furniture and home accessories made by skilled artisans from Katsina State. Every piece tells a story of tradition, craftsmanship, and pride.</p>
           <div className="hero-actions anim-fade-up anim-d3">
             <a href="#shop-section" className="btn btn-primary btn-lg" onClick={() => setTimeout(() => document.getElementById('shop-section')?.scrollIntoView({behavior:'smooth'}), 50)}>Explore Collection</a>
-            <button className="btn btn-outline btn-lg" onClick={() => onAuthClick('signup')}>Become an Artisan</button>
+            <button className="btn btn-outline btn-lg" onClick={() => onOpenAuth('signup')}>Become an Artisan</button>
           </div>
           <div className="hero-stats anim-fade-up anim-d4">
-            {[[(products.length || '0')+'+','Artisan Products'],[(artisans.length || '0'),'Local Artisans'],['15k+','Happy Homes']].map(([num,label]) => (
-              <div key={label}><p className="hero-stat-num">{num}</p><p className="hero-stat-label">{label}</p></div>
+            {[['120+','Artisan Products'],['34','Local Artisans'],['15k+','Happy Homes']].map(([num,label]) => (
+              <div key={label}>
+                <p className="hero-stat-num">{num}</p>
+                <p className="hero-stat-label">{label}</p>
+              </div>
             ))}
           </div>
         </div>
@@ -595,27 +483,26 @@ function Storefront({ navigate, onSelectProduct, onAddCart, onAuthClick }) {
       </div>
 
       {/* ARTISANS */}
-      {artisans.length > 0 && (
-        <section className="section" style={{paddingBottom:32}}>
-          <div className="section-header">
-            <div><p className="section-label">Meet the Makers</p><h2 className="section-title">Our Artisans</h2></div>
-            <a href="#" className="view-all">View All <span>→</span></a>
-          </div>
-          <div className="artisans-grid">
-            {artisans.map((a, i) => (
-              <div key={a.id} className="artisan-card anim-fade-up" style={{animationDelay: i*0.1+'s'}}>
-                <div className="artisan-top">
-                  <div className="artisan-avatar" style={{background:'rgba(200,145,58,0.12)'}}>{a.shop_name[0]}</div>
-                  <div>
-                    <p className="artisan-name">{a.shop_name}</p>
-                    <p className="artisan-loc">{a.location}, Katsina</p>
-                  </div>
-                </div>
+      <section className="section" style={{paddingBottom:32}}>
+        <div className="section-header">
+          <div><p className="section-label">Meet the Makers</p><h2 className="section-title">Our Artisans</h2></div>
+          <a href="#" className="view-all">View All <span>→</span></a>
+        </div>
+        <div className="artisans-grid">
+          {SEED_ARTISANS.map((a,i) => (
+            <div key={a.name} className="artisan-card anim-fade-up" style={{animationDelay:i*0.1+'s'}}>
+              <div className="artisan-top">
+                <div className="artisan-avatar" style={{background:a.bg}}>{a.name[0]}</div>
+                <div><p className="artisan-name">{a.name}</p><p className="artisan-loc">{a.location}, Katsina</p></div>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+              <div className="artisan-bottom">
+                <span className="artisan-count">{a.product_count} products</span>
+                <Stars rating={a.rating} size={11} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* SHOP */}
       <section id="shop-section" className="section" style={{paddingTop:48}}>
@@ -629,8 +516,8 @@ function Storefront({ navigate, onSelectProduct, onAddCart, onAuthClick }) {
             <input className="search-input" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search furniture, artisans..." />
           </div>
           <div className="cat-pills">
-            {catNames.map(c => (
-              <button key={c} className={`cat-pill${activeCategory === c ? ' active' : ''}`} onClick={() => setActiveCategory(c)}>{c}</button>
+            {CATEGORIES.map(c => (
+              <button key={c} className={`cat-pill${activeCategory===c?' active':''}`} onClick={() => setActiveCategory(c)}>{c}</button>
             ))}
           </div>
           <select className="sort-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
@@ -641,20 +528,17 @@ function Storefront({ navigate, onSelectProduct, onAddCart, onAuthClick }) {
           </select>
         </div>
 
-        {loading ? (
-          <div className="loading-overlay"><div className="spinner" /><p className="loading-text">Loading products...</p></div>
-        ) : filtered.length > 0 ? (
-          <>
-            <p className="results-count">{filtered.length} piece{filtered.length !== 1 ? 's' : ''} found</p>
-            <div className="products-grid">
-              {filtered.map((p, i) => <ProductCard key={p.id} product={p} onClick={onSelectProduct} onAddCart={onAddCart} delay={i * 0.06} />)}
-            </div>
-          </>
-        ) : (
+        <p className="results-count">{loading ? 'Loading...' : `${filtered.length} piece${filtered.length !== 1 ? 's' : ''} found`}</p>
+
+        {filtered.length > 0 ? (
+          <div className="products-grid">
+            {filtered.map((p,i) => <ProductCard key={p.id} product={p} onClick={onSelectProduct} onAddCart={onAddCart} delay={i*0.06} />)}
+          </div>
+        ) : !loading && (
           <div className="empty-state">
             <p className="empty-state-icon">🔍</p>
-            <p className="empty-state-title">{products.length === 0 ? 'No products yet' : 'No pieces found'}</p>
-            <p className="empty-state-sub">{products.length === 0 ? 'Check back soon — artisans are adding new pieces!' : 'Try adjusting your search or filters'}</p>
+            <p className="empty-state-title">No pieces found</p>
+            <p className="empty-state-sub">Try adjusting your search or filters</p>
           </div>
         )}
       </section>
@@ -666,8 +550,16 @@ function Storefront({ navigate, onSelectProduct, onAddCart, onAuthClick }) {
           <h2 className="section-title">Preserving the <em>Rich Craft</em> of Katsina State</h2>
           <p className="heritage-sub">From the ancient city walls of Katsina to the vibrant Durbar festivals, our artisans draw from centuries of creative tradition.</p>
           <div className="heritage-grid">
-            {[['🌿','Sustainably Sourced','Local woods and rattan harvested responsibly from Katsina forests.'],['🤲','Handcrafted','Every piece is made by hand using techniques passed down through generations.'],['🏛️','Cultural Heritage','Designs inspired by Hausa architecture and Katsina\'s deep artistic legacy.'],['🚚','Nationwide Delivery','We ship across Nigeria — from Katsina to your doorstep.']].map(([icon,title,desc]) => (
-              <div key={title} className="heritage-card"><span className="heritage-card-icon">{icon}</span><h3 className="heritage-card-title">{title}</h3><p className="heritage-card-desc">{desc}</p></div>
+            {[['🌿','Sustainably Sourced','Local woods and rattan harvested responsibly from Katsina forests.'],
+              ['🤲','Handcrafted','Every piece made by hand using techniques passed through generations.'],
+              ['🏛️','Cultural Heritage','Designs inspired by Hausa architecture and Katsina\'s artistic legacy.'],
+              ['🚚','Nationwide Delivery','We ship across Nigeria — from Katsina to your doorstep.'],
+            ].map(([icon,title,desc]) => (
+              <div key={title} className="heritage-card">
+                <span className="heritage-card-icon">{icon}</span>
+                <h3 className="heritage-card-title">{title}</h3>
+                <p className="heritage-card-desc">{desc}</p>
+              </div>
             ))}
           </div>
         </div>
@@ -695,276 +587,258 @@ function Storefront({ navigate, onSelectProduct, onAddCart, onAuthClick }) {
    ARTISAN DASHBOARD
    ───────────────────────────────────────────────────────── */
 
-function Dashboard({ navigate }) {
-  const { user, profile, artisan, fetchArtisan } = useAuth();
-  const toast = useToast();
-  const [tab, setTab] = useState('products');
+function ArtisanDashboard({ user, artisan, navigate, showToast }) {
+  const [tab, setTab]           = useState('products');
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]   = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [imgFile, setImgFile]   = useState(null);
+  const [imgPreview, setImgPreview] = useState(null);
+  const fileRef = useRef();
 
-  // Shop setup form
-  const [shopForm, setShopForm] = useState({ shopName:'', location:'', phone:'', bio:'' });
+  const [form, setForm] = useState({
+    name:'', price:'', category:'Chairs', description:'', tag:'',
+  });
+  const upd = (k,v) => setForm(f => ({...f, [k]:v}));
 
-  // Product form
-  const [showProductForm, setShowProductForm] = useState(false);
-  const [productForm, setProductForm] = useState({ name:'', price:'', category_id:'', description:'', stock_quantity: '1' });
-  const [productImages, setProductImages] = useState([]);
-  const [uploading, setUploading] = useState(false);
-
-  useEffect(() => { loadDashboard(); }, [artisan]);
-
-  const loadDashboard = async () => {
-    setLoading(true);
-    const { data: cats } = await supabase.from('categories').select('*').order('sort_order');
-    setCategories(cats || []);
-    if (cats?.length && !productForm.category_id) {
-      setProductForm(f => ({...f, category_id: cats[0].id}));
-    }
-
-    if (artisan?.id) {
-      const { data: prods } = await supabase
-        .from('products')
-        .select('*, categories(name), product_images(url, is_primary)')
-        .eq('artisan_id', artisan.id)
-        .order('created_at', { ascending: false });
-      setProducts(prods || []);
-    }
+  const fetchProducts = async () => {
+    const { data } = await supabase
+      .from('products')
+      .select('*')
+      .eq('artisan_id', artisan.id)
+      .order('created_at', { ascending: false });
+    setProducts(data || []);
     setLoading(false);
   };
 
-  // ── CREATE SHOP ──
-  const handleCreateShop = async () => {
-    if (!shopForm.shopName || !shopForm.location) { toast('Please fill in shop name and location', 'error'); return; }
-    const slug = shopForm.shopName.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-') + '-' + Date.now().toString(36);
+  useEffect(() => { fetchProducts(); }, []);
 
-    const { error } = await supabase.from('artisans').insert({
-      profile_id: user.id,
-      shop_name: shopForm.shopName,
-      slug,
-      location: shopForm.location,
-      phone: shopForm.phone,
-      bio: shopForm.bio,
-      status: 'pending',
-    });
-
-    if (error) { toast(error.message, 'error'); return; }
-
-    // Update profile role to artisan
-    await supabase.from('profiles').update({ role: 'artisan' }).eq('id', user.id);
-    await fetchArtisan(user.id);
-    toast('Shop submitted for review! We\'ll approve it shortly.', 'success');
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImgFile(file);
+    setImgPreview(URL.createObjectURL(file));
   };
 
-  // ── ADD PRODUCT ──
   const handleAddProduct = async () => {
-    if (!productForm.name || !productForm.price) { toast('Name and price are required', 'error'); return; }
-    setUploading(true);
+    if (!form.name || !form.price) return showToast('Name and price are required', 'error');
+    if (artisan.status !== 'approved') return showToast('Your account must be approved before listing products', 'error');
+    setSubmitting(true);
 
-    const slug = productForm.name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-') + '-' + Date.now().toString(36);
+    let img_url = null;
 
-    const { data: prod, error } = await supabase.from('products').insert({
-      artisan_id: artisan.id,
-      category_id: productForm.category_id,
-      name: productForm.name,
-      slug,
-      description: productForm.description,
-      price: parseFloat(productForm.price),
-      stock_quantity: parseInt(productForm.stock_quantity) || 1,
-      status: 'pending',
-    }).select().single();
-
-    if (error) { toast(error.message, 'error'); setUploading(false); return; }
-
-    // Upload images
-    for (let i = 0; i < productImages.length; i++) {
-      const file = productImages[i];
-      const ext = file.name.split('.').pop();
-      const path = `${user.id}/${prod.id}/${Date.now()}-${i}.${ext}`;
-
-      const { error: upErr } = await supabase.storage.from('product-images').upload(path, file);
-      if (upErr) { console.error(upErr); continue; }
-
-      const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(path);
-
-      await supabase.from('product_images').insert({
-        product_id: prod.id,
-        url: publicUrl,
-        is_primary: i === 0,
-        sort_order: i,
-      });
+    // Upload image if selected
+    if (imgFile) {
+      const ext  = imgFile.name.split('.').pop();
+      const path = `${artisan.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('product-images').upload(path, imgFile);
+      if (uploadError) { setSubmitting(false); return showToast('Image upload failed: ' + uploadError.message, 'error'); }
+      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+      img_url = urlData.publicUrl;
     }
 
-    setProductForm({ name:'', price:'', category_id: categories[0]?.id || '', description:'', stock_quantity: '1' });
-    setProductImages([]);
-    setShowProductForm(false);
-    setUploading(false);
-    await loadDashboard();
-    toast('Product submitted for review!', 'success');
+    const { error } = await supabase.from('products').insert({
+      artisan_id:   artisan.id,
+      artisan_name: artisan.shop_name,
+      name:         form.name,
+      price:        parseInt(form.price),
+      category:     form.category,
+      description:  form.description,
+      tag:          form.tag || null,
+      img_url,
+      status:       'pending',
+      rating:       0,
+      review_count: 0,
+      is_featured:  false,
+    });
+
+    setSubmitting(false);
+    if (error) return showToast(error.message, 'error');
+
+    showToast('Product submitted for review!', 'success');
+    setForm({ name:'', price:'', category:'Chairs', description:'', tag:'' });
+    setImgFile(null); setImgPreview(null);
+    setShowForm(false);
+    fetchProducts();
   };
 
-  // ── DELETE PRODUCT ──
-  const handleDeleteProduct = async (id) => {
+  const handleDelete = async (id) => {
     await supabase.from('products').delete().eq('id', id);
-    setProducts(p => p.filter(x => x.id !== id));
-    toast('Product deleted', 'info');
+    showToast('Product removed', 'info');
+    fetchProducts();
   };
 
-  const tabs = [['products','Products'],['shop','My Shop'],['orders','Orders']];
+  const tabs = [['products','My Products'],['shop','Shop Profile'],['orders','Orders'],['analytics','Analytics']];
 
-  // ── No artisan profile yet → show setup ──
-  if (!artisan) {
-    return (
-      <div style={{paddingTop:76, minHeight:'100vh', background:'var(--cream)'}}>
-        <div style={{maxWidth:600, margin:'0 auto', padding:'60px 36px 80px'}}>
-          <button onClick={() => navigate('#/')} style={{display:'flex',alignItems:'center',gap:6,color:'var(--saddle)',fontWeight:600,fontSize:14,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:24}}>
-            <Icon.Back /> Back to Shop
-          </button>
-          <h1 style={{fontFamily:'var(--font-display)',fontSize:32,fontWeight:600,color:'var(--earth)',marginBottom:8}}>Create Your Storefront</h1>
-          <p style={{fontSize:14,color:'var(--muted)',lineHeight:1.65,marginBottom:32}}>Set up your artisan shop to start selling handcrafted furniture to customers across Nigeria. Your shop will be reviewed before going live.</p>
-
-          <div className="form-grid">
-            <div><label className="form-label">Shop Name</label><input className="form-input" value={shopForm.shopName} onChange={e => setShopForm({...shopForm, shopName:e.target.value})} placeholder="e.g. Sani's Rattan Creations" /></div>
-            <div><label className="form-label">Location</label><input className="form-input" value={shopForm.location} onChange={e => setShopForm({...shopForm, location:e.target.value})} placeholder="e.g. Katsina City" /></div>
-            <div><label className="form-label">Phone</label><input className="form-input" value={shopForm.phone} onChange={e => setShopForm({...shopForm, phone:e.target.value})} placeholder="+234..." /></div>
-            <div className="form-full"><label className="form-label">Bio</label><textarea className="form-input form-textarea" value={shopForm.bio} onChange={e => setShopForm({...shopForm, bio:e.target.value})} placeholder="Tell your story..." /></div>
-          </div>
-          <button className="btn btn-primary btn-lg btn-full" style={{marginTop:24}} onClick={handleCreateShop}>Submit for Review</button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Pending approval ──
-  if (artisan.status === 'pending') {
-    return (
-      <div style={{paddingTop:76, minHeight:'100vh', background:'var(--cream)'}}>
-        <div style={{maxWidth:500, margin:'0 auto', padding:'100px 36px', textAlign:'center'}}>
-          <div style={{fontSize:56,marginBottom:16}}>⏳</div>
-          <h2 style={{fontFamily:'var(--font-display)',fontSize:28,fontWeight:600,color:'var(--earth)',marginBottom:12}}>Shop Under Review</h2>
-          <p style={{fontSize:15,color:'var(--warm-gray)',lineHeight:1.7}}>Your shop "{artisan.shop_name}" is being reviewed by our team. You'll be notified once approved and can then start adding products.</p>
-          <StatusBadge status="pending" />
-          <button className="btn btn-outline" style={{marginTop:32}} onClick={() => navigate('#/')}>Back to Shop</button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Rejected ──
-  if (artisan.status === 'rejected') {
-    return (
-      <div style={{paddingTop:76, minHeight:'100vh', background:'var(--cream)'}}>
-        <div style={{maxWidth:500, margin:'0 auto', padding:'100px 36px', textAlign:'center'}}>
-          <div style={{fontSize:56,marginBottom:16}}>😔</div>
-          <h2 style={{fontFamily:'var(--font-display)',fontSize:28,fontWeight:600,color:'var(--earth)',marginBottom:12}}>Application Not Approved</h2>
-          <p style={{fontSize:15,color:'var(--warm-gray)',lineHeight:1.7}}>{artisan.admin_note || 'Your shop application was not approved at this time. Please contact us for more details.'}</p>
-          <button className="btn btn-outline" style={{marginTop:32}} onClick={() => navigate('#/')}>Back to Shop</button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Approved dashboard ──
   return (
-    <div style={{paddingTop:76, minHeight:'100vh', background:'var(--cream)'}}>
-      <div style={{maxWidth:900, margin:'0 auto', padding:'40px 36px 80px'}}>
-        <button onClick={() => navigate('#/')} style={{display:'flex',alignItems:'center',gap:6,color:'var(--saddle)',fontWeight:600,fontSize:14,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:8}}>
+    <div style={{paddingTop:76,minHeight:'100vh',background:'var(--cream)'}}>
+      <div style={{maxWidth:920,margin:'0 auto',padding:'40px 36px 80px'}}>
+
+        <button onClick={() => navigate('#/')} style={{display:'flex',alignItems:'center',gap:6,color:'var(--saddle)',fontWeight:600,fontSize:14,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:20}}>
           <Icon.Back /> Back to Shop
         </button>
-        <div style={{marginBottom:32}}>
-          <h1 style={{fontFamily:'var(--font-display)',fontSize:'clamp(28px,4vw,38px)',fontWeight:600,color:'var(--earth)'}}>
+
+        {/* Status Banner */}
+        {artisan.status === 'pending' && (
+          <div style={{background:'#FEF3C7',border:'1px solid #F59E0B',borderRadius:12,padding:'14px 20px',marginBottom:24,display:'flex',alignItems:'center',gap:12}}>
+            <span style={{fontSize:20}}>⏳</span>
+            <div>
+              <p style={{fontSize:14,fontWeight:600,color:'#92400E',margin:0}}>Application Under Review</p>
+              <p style={{fontSize:13,color:'#B45309',margin:'2px 0 0'}}>Your artisan account is pending approval. You can set up your profile but won't be able to list products until approved.</p>
+            </div>
+          </div>
+        )}
+        {artisan.status === 'rejected' && (
+          <div style={{background:'#FEE2E2',border:'1px solid #EF4444',borderRadius:12,padding:'14px 20px',marginBottom:24}}>
+            <p style={{fontSize:14,fontWeight:600,color:'#991B1B',margin:0}}>Application Not Approved</p>
+            <p style={{fontSize:13,color:'#B91C1C',margin:'4px 0 0'}}>Unfortunately your application was not approved at this time. Please contact us for more information.</p>
+          </div>
+        )}
+
+        <div style={{marginBottom:28}}>
+          <h1 style={{fontFamily:'var(--font-display)',fontSize:'clamp(24px,4vw,36px)',fontWeight:600,color:'var(--earth)',letterSpacing:'-0.5px'}}>
             {artisan.shop_name}
           </h1>
-          <p style={{fontSize:14,color:'var(--muted)',marginTop:4}}>Manage your products and orders</p>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginTop:6}}>
+            <p style={{fontSize:14,color:'var(--muted)',margin:0}}>{artisan.location} · {artisan.email}</p>
+            <StatusBadge status={artisan.status} />
+          </div>
         </div>
 
         <div className="admin-tabs" style={{borderBottom:'1px solid #F0E6D8',marginBottom:0}}>
           {tabs.map(([key,label]) => (
-            <button key={key} className={`admin-tab${tab === key ? ' active' : ''}`} onClick={() => setTab(key)}>{label}</button>
+            <button key={key} className={`admin-tab${tab===key?' active':''}`} onClick={() => setTab(key)}>{label}</button>
           ))}
         </div>
 
-        <div style={{padding:'28px 0'}}>
+        <div style={{paddingTop:28}}>
+
+          {/* PRODUCTS TAB */}
           {tab === 'products' && (
             <>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:22}}>
-                <span style={{fontSize:14,color:'var(--warm-gray)'}}>{products.length} products</span>
-                <button className="btn btn-primary" onClick={() => setShowProductForm(!showProductForm)}>+ Add Product</button>
+                <span style={{fontSize:14,color:'var(--warm-gray)'}}>{products.length} products listed</span>
+                <button className="btn btn-primary" onClick={() => setShowForm(!showForm)} disabled={artisan.status !== 'approved'}>
+                  + Add Product
+                </button>
               </div>
 
-              {showProductForm && (
+              {showForm && (
                 <div className="new-product-form">
                   <h3>New Product</h3>
                   <div className="form-grid">
                     <div>
-                      <label className="form-label">Product Name</label>
-                      <input className="form-input" value={productForm.name} onChange={e => setProductForm({...productForm, name:e.target.value})} placeholder="e.g. Katsina Rattan Chair" />
+                      <label className="form-label">Product Name *</label>
+                      <input className="form-input" value={form.name} onChange={e => upd('name',e.target.value)} placeholder="e.g. Katsina Rattan Chair" />
                     </div>
                     <div>
-                      <label className="form-label">Price (₦)</label>
-                      <input className="form-input" type="number" value={productForm.price} onChange={e => setProductForm({...productForm, price:e.target.value})} placeholder="e.g. 150000" />
+                      <label className="form-label">Price (₦) *</label>
+                      <input className="form-input" type="number" value={form.price} onChange={e => upd('price',e.target.value)} placeholder="e.g. 150000" />
                     </div>
                     <div>
                       <label className="form-label">Category</label>
-                      <select className="form-input form-select" value={productForm.category_id} onChange={e => setProductForm({...productForm, category_id:e.target.value})}>
-                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <select className="form-input form-select" value={form.category} onChange={e => upd('category',e.target.value)}>
+                        {CATEGORIES.filter(c => c !== 'All').map(c => <option key={c}>{c}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="form-label">Stock Quantity</label>
-                      <input className="form-input" type="number" value={productForm.stock_quantity} onChange={e => setProductForm({...productForm, stock_quantity:e.target.value})} />
+                      <label className="form-label">Tag (optional)</label>
+                      <select className="form-input form-select" value={form.tag} onChange={e => upd('tag',e.target.value)}>
+                        <option value="">None</option>
+                        <option>New Arrival</option>
+                        <option>Best Seller</option>
+                        <option>Premium</option>
+                      </select>
                     </div>
                     <div className="form-full">
                       <label className="form-label">Description</label>
-                      <textarea className="form-input form-textarea" value={productForm.description} onChange={e => setProductForm({...productForm, description:e.target.value})} placeholder="Describe your product..." />
+                      <textarea className="form-input form-textarea" value={form.description} onChange={e => upd('description',e.target.value)} placeholder="Describe your product — materials, dimensions, inspiration..." />
                     </div>
                     <div className="form-full">
-                      <label className="form-label">Product Images</label>
-                      <input type="file" accept="image/*" multiple onChange={e => setProductImages(Array.from(e.target.files))} style={{fontSize:13,color:'var(--warm-gray)'}} />
-                      {productImages.length > 0 && <p style={{fontSize:12,color:'var(--muted)',marginTop:6}}>{productImages.length} file(s) selected — first image will be the primary</p>}
+                      <label className="form-label">Product Image</label>
+                      <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleImageChange} />
+                      <div className="upload-zone" onClick={() => fileRef.current.click()}>
+                        {imgPreview
+                          ? <img src={imgPreview} alt="preview" style={{height:120,objectFit:'contain',margin:'0 auto',borderRadius:8}} />
+                          : <><Icon.Upload /><p>Click to upload image</p><p className="hint">PNG, JPG up to 5MB</p></>
+                        }
+                      </div>
                     </div>
                   </div>
                   <div style={{display:'flex',gap:12,marginTop:22,justifyContent:'flex-end'}}>
-                    <button className="btn btn-outline" onClick={() => setShowProductForm(false)}>Cancel</button>
-                    <button className="btn btn-rattan" onClick={handleAddProduct} disabled={uploading}>
-                      {uploading ? 'Uploading...' : 'Submit for Review'}
+                    <button className="btn btn-outline" onClick={() => { setShowForm(false); setImgPreview(null); setImgFile(null); }}>Cancel</button>
+                    <button className="btn btn-rattan" onClick={handleAddProduct} disabled={submitting}>
+                      {submitting ? <Spinner size={16} color="#fff" /> : 'Submit for Review'}
                     </button>
                   </div>
                 </div>
               )}
 
-              {loading ? <div className="spinner" /> : products.map(p => (
-                <div key={p.id} className="p-row">
-                  <div className="p-row-thumb">
-                    {p.product_images?.[0]?.url ? <img src={p.product_images[0].url} alt="" /> : <span style={{fontSize:20,opacity:0.22}}>🪑</span>}
-                  </div>
-                  <div className="p-row-info">
-                    <p className="p-row-name">{p.name}</p>
-                    <p className="p-row-meta">{p.categories?.name} · <StatusBadge status={p.status} /></p>
-                  </div>
-                  <span className="p-row-price">{fmt(p.price)}</span>
-                  <div className="p-row-actions">
-                    <button className="icon-btn icon-btn--danger" onClick={() => handleDeleteProduct(p.id)}><Icon.Trash /></button>
-                  </div>
+              {loading ? (
+                <div style={{textAlign:'center',padding:40}}><Spinner size={32} /></div>
+              ) : products.length === 0 ? (
+                <div className="panel-empty">
+                  <p style={{fontSize:32,opacity:0.2}}>📦</p>
+                  <p>No products yet</p>
+                  <p>{artisan.status === 'approved' ? 'Click "+ Add Product" to list your first piece.' : 'Once approved, you can start listing your products.'}</p>
                 </div>
-              ))}
+              ) : (
+                products.map(p => (
+                  <div key={p.id} className="p-row">
+                    <div className="p-row-thumb">
+                      {p.img_url ? <img src={p.img_url} alt="" /> : <span style={{fontSize:20,opacity:0.22}}>🪑</span>}
+                    </div>
+                    <div className="p-row-info">
+                      <p className="p-row-name">{p.name}</p>
+                      <p className="p-row-meta">{p.category} · {fmt(p.price)}</p>
+                    </div>
+                    <StatusBadge status={p.status} />
+                    <div className="p-row-actions">
+                      <button className="icon-btn icon-btn--danger" onClick={() => handleDelete(p.id)}><Icon.Trash /></button>
+                    </div>
+                  </div>
+                ))
+              )}
             </>
           )}
 
+          {/* SHOP PROFILE TAB */}
           {tab === 'shop' && (
             <div>
-              <h3 style={{fontFamily:'var(--font-display)',fontSize:22,fontWeight:600,marginBottom:16,color:'var(--earth)'}}>Shop Details</h3>
-              <div style={{background:'#FAF5ED',borderRadius:16,padding:24,border:'1px solid #E0D5C4'}}>
-                <p style={{fontSize:14}}><strong>Shop Name:</strong> {artisan.shop_name}</p>
-                <p style={{fontSize:14,marginTop:8}}><strong>Location:</strong> {artisan.location}</p>
-                <p style={{fontSize:14,marginTop:8}}><strong>Status:</strong> <StatusBadge status={artisan.status} /></p>
-                {artisan.bio && <p style={{fontSize:14,marginTop:8}}><strong>Bio:</strong> {artisan.bio}</p>}
+              <h3 style={{fontFamily:'var(--font-display)',fontSize:20,fontWeight:600,marginBottom:20,color:'var(--earth)'}}>Shop Profile</h3>
+              <div className="form-grid">
+                {[['Shop Name', artisan.shop_name],['Owner', artisan.owner_name],['Location', artisan.location],['Phone', artisan.phone]].map(([label,val]) => (
+                  <div key={label}>
+                    <label className="form-label">{label}</label>
+                    <div style={{padding:'12px 18px',background:'#FAF5ED',borderRadius:10,border:'1px solid #E0D5C4',fontSize:14,color:'var(--earth)'}}>{val || '—'}</div>
+                  </div>
+                ))}
+                <div className="form-full">
+                  <label className="form-label">Bio</label>
+                  <div style={{padding:'12px 18px',background:'#FAF5ED',borderRadius:10,border:'1px solid #E0D5C4',fontSize:14,color:'var(--earth)',lineHeight:1.6}}>{artisan.bio || '—'}</div>
+                </div>
               </div>
+              <p style={{fontSize:12,color:'var(--muted)',marginTop:16}}>To update your shop details, please contact the Katsina Crafts admin team.</p>
             </div>
           )}
 
+          {/* ORDERS */}
           {tab === 'orders' && (
             <div className="panel-empty"><Icon.Truck /><p>No orders yet</p><p>Orders will appear here once customers purchase your products</p></div>
+          )}
+
+          {/* ANALYTICS */}
+          {tab === 'analytics' && (
+            <div className="stat-grid">
+              {[['Products Listed',String(products.length),''],['Approved',String(products.filter(p=>p.status==='approved').length),''],['Pending Review',String(products.filter(p=>p.status==='pending').length),''],['Views','—','']].map(([label,value,change]) => (
+                <div key={label} className="stat-card">
+                  <p className="stat-label">{label}</p>
+                  <p className="stat-value">{value}</p>
+                  {change && <p className="stat-change">{change}</p>}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -977,138 +851,211 @@ function Dashboard({ navigate }) {
    ADMIN PANEL
    ───────────────────────────────────────────────────────── */
 
-function AdminPanel({ navigate }) {
-  const { profile } = useAuth();
-  const toast = useToast();
-  const [tab, setTab] = useState('artisans');
+function AdminPanel({ navigate, showToast }) {
+  const [tab, setTab]           = useState('artisans');
   const [artisans, setArtisans] = useState([]);
   const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]   = useState(true);
 
-  useEffect(() => { loadAdmin(); }, []);
-
-  const loadAdmin = async () => {
-    setLoading(true);
-    const { data: arts } = await supabase.from('artisans').select('*, profiles(full_name, email)').order('created_at', { ascending: false });
-    const { data: prods } = await supabase.from('products').select('*, artisans(shop_name), categories(name)').order('created_at', { ascending: false });
-    setArtisans(arts || []);
-    setProducts(prods || []);
+  const fetchArtisans = async () => {
+    const { data } = await supabase.from('artisans').select('*').order('created_at', { ascending: false });
+    setArtisans(data || []);
+  };
+  const fetchProducts = async () => {
+    const { data } = await supabase.from('products').select('*, artisans(shop_name)').order('created_at', { ascending: false });
+    setProducts(data || []);
     setLoading(false);
   };
 
-  const updateArtisan = async (id, status, note = '') => {
-    const updates = { status, admin_note: note };
-    if (status === 'approved') updates.approved_at = new Date().toISOString();
-    await supabase.from('artisans').update(updates).eq('id', id);
-    toast(`Artisan ${status}`, 'success');
-    loadAdmin();
+  useEffect(() => { fetchArtisans(); fetchProducts(); }, []);
+
+  const updateArtisanStatus = async (id, status) => {
+    await supabase.from('artisans').update({ status }).eq('id', id);
+    showToast(`Artisan ${status}`, status === 'approved' ? 'success' : 'error');
+    fetchArtisans();
   };
 
-  const updateProduct = async (id, status, note = '') => {
-    await supabase.from('products').update({ status, admin_note: note }).eq('id', id);
-    toast(`Product ${status}`, 'success');
-    loadAdmin();
+  const updateProductStatus = async (id, status) => {
+    await supabase.from('products').update({ status }).eq('id', id);
+    showToast(`Product ${status}`, status === 'approved' ? 'success' : 'error');
+    fetchProducts();
   };
 
-  if (profile?.role !== 'admin') {
-    return (
-      <div style={{paddingTop:76, minHeight:'100vh', background:'var(--cream)', textAlign:'center', padding:'140px 20px'}}>
-        <div style={{fontSize:56,marginBottom:16}}>🔒</div>
-        <h2 style={{fontFamily:'var(--font-display)',fontSize:28,color:'var(--earth)'}}>Access Denied</h2>
-        <p style={{color:'var(--muted)',marginTop:8}}>You need admin privileges to access this page.</p>
-        <button className="btn btn-outline" style={{marginTop:24}} onClick={() => navigate('#/')}>Back to Shop</button>
-      </div>
-    );
-  }
+  const tabs = [['artisans','Artisans'],['products','Products'],['analytics','Analytics']];
 
-  const pendingArtisans = artisans.filter(a => a.status === 'pending');
-  const pendingProducts = products.filter(p => p.status === 'pending');
+  const pending_artisans  = artisans.filter(a => a.status === 'pending');
+  const pending_products  = products.filter(p => p.status === 'pending');
 
   return (
-    <div style={{paddingTop:76, minHeight:'100vh', background:'var(--cream)'}}>
-      <div style={{maxWidth:1000, margin:'0 auto', padding:'40px 36px 80px'}}>
-        <button onClick={() => navigate('#/')} style={{display:'flex',alignItems:'center',gap:6,color:'var(--saddle)',fontWeight:600,fontSize:14,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:8}}>
+    <div style={{paddingTop:76,minHeight:'100vh',background:'var(--cream)'}}>
+      <div style={{maxWidth:1000,margin:'0 auto',padding:'40px 36px 80px'}}>
+
+        <button onClick={() => navigate('#/')} style={{display:'flex',alignItems:'center',gap:6,color:'var(--saddle)',fontWeight:600,fontSize:14,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:20}}>
           <Icon.Back /> Back to Shop
         </button>
-        <div style={{marginBottom:32}}>
-          <h1 style={{fontFamily:'var(--font-display)',fontSize:'clamp(28px,4vw,38px)',fontWeight:600,color:'var(--earth)'}}>Admin Panel</h1>
-          <p style={{fontSize:14,color:'var(--muted)',marginTop:4}}>
-            {pendingArtisans.length > 0 && <span style={{color:'var(--saddle)',fontWeight:600}}>{pendingArtisans.length} artisan(s) pending · </span>}
-            {pendingProducts.length > 0 && <span style={{color:'var(--saddle)',fontWeight:600}}>{pendingProducts.length} product(s) pending</span>}
-            {pendingArtisans.length === 0 && pendingProducts.length === 0 && 'All caught up!'}
-          </p>
+
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:28}}>
+          <div>
+            <h1 style={{fontFamily:'var(--font-display)',fontSize:'clamp(24px,4vw,36px)',fontWeight:600,color:'var(--earth)',letterSpacing:'-0.5px'}}>Admin Panel</h1>
+            <p style={{fontSize:14,color:'var(--muted)',marginTop:4}}>Manage artisans, products, and platform oversight</p>
+          </div>
+          <div style={{display:'flex',gap:12}}>
+            {pending_artisans.length > 0 && <span style={{background:'#FEF3C7',color:'#92400E',padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:600}}>{pending_artisans.length} artisans pending</span>}
+            {pending_products.length > 0 && <span style={{background:'#DBEAFE',color:'#1E40AF',padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:600}}>{pending_products.length} products pending</span>}
+          </div>
         </div>
 
-        <div className="admin-tabs" style={{borderBottom:'1px solid #F0E6D8'}}>
-          {[['artisans',`Artisans (${artisans.length})`],['products',`Products (${products.length})`],['overview','Overview']].map(([key,label]) => (
-            <button key={key} className={`admin-tab${tab === key ? ' active' : ''}`} onClick={() => setTab(key)}>{label}</button>
+        {/* Quick Stats */}
+        <div className="stat-grid" style={{marginBottom:32}}>
+          {[['Total Artisans',String(artisans.length)],['Approved Artisans',String(artisans.filter(a=>a.status==='approved').length)],['Total Products',String(products.length)],['Live Products',String(products.filter(p=>p.status==='approved').length)]].map(([label,val]) => (
+            <div key={label} className="stat-card">
+              <p className="stat-label">{label}</p>
+              <p className="stat-value">{val}</p>
+            </div>
           ))}
         </div>
 
-        <div style={{padding:'28px 0'}}>
-          {loading && <div className="spinner" />}
+        <div className="admin-tabs" style={{borderBottom:'1px solid #F0E6D8'}}>
+          {tabs.map(([key,label]) => (
+            <button key={key} className={`admin-tab${tab===key?' active':''}`} onClick={() => setTab(key)}>
+              {label}
+              {key==='artisans' && pending_artisans.length > 0 && <span style={{marginLeft:6,background:'#F59E0B',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{pending_artisans.length}</span>}
+              {key==='products' && pending_products.length > 0 && <span style={{marginLeft:6,background:'#3B82F6',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{pending_products.length}</span>}
+            </button>
+          ))}
+        </div>
+
+        <div style={{paddingTop:28}}>
 
           {/* ARTISANS TAB */}
-          {!loading && tab === 'artisans' && (
-            <div>
-              {artisans.length === 0 ? (
-                <div className="panel-empty"><p>No artisan applications yet</p></div>
-              ) : artisans.map(a => (
-                <div key={a.id} className="p-row" style={{flexWrap:'wrap',gap:12}}>
-                  <div className="artisan-avatar" style={{background:'rgba(200,145,58,0.12)',width:42,height:42,fontSize:18}}>{a.shop_name[0]}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <p className="p-row-name">{a.shop_name}</p>
-                    <p className="p-row-meta">{a.profiles?.full_name} · {a.location} · {a.profiles?.email}</p>
-                  </div>
-                  <StatusBadge status={a.status} />
-                  {a.status === 'pending' && (
-                    <div style={{display:'flex',gap:8}}>
-                      <button className="btn btn-primary" style={{padding:'7px 16px',fontSize:12}} onClick={() => updateArtisan(a.id, 'approved')}>Approve</button>
-                      <button className="btn btn-outline" style={{padding:'7px 16px',fontSize:12,color:'var(--danger)',borderColor:'var(--danger)'}} onClick={() => updateArtisan(a.id, 'rejected', 'Does not meet criteria')}>Reject</button>
+          {tab === 'artisans' && (
+            <>
+              {loading ? <div style={{textAlign:'center',padding:40}}><Spinner size={32} /></div> : artisans.length === 0 ? (
+                <div className="panel-empty"><p style={{fontSize:32,opacity:0.2}}>👤</p><p>No artisan applications yet</p><p>Applications will appear here when artisans sign up</p></div>
+              ) : (
+                artisans.map(a => (
+                  <div key={a.id} className="p-row" style={{flexWrap:'wrap',gap:12}}>
+                    <div className="artisan-avatar" style={{background:'rgba(200,145,58,0.12)',width:44,height:44,flexShrink:0}}>{a.shop_name[0]}</div>
+                    <div className="p-row-info">
+                      <p className="p-row-name">{a.shop_name}</p>
+                      <p className="p-row-meta">{a.owner_name} · {a.location || 'Katsina'} · {a.email}</p>
+                      {a.bio && <p style={{fontSize:12,color:'var(--warm-gray)',marginTop:4,lineHeight:1.5}}>{a.bio.slice(0,100)}{a.bio.length>100?'...':''}</p>}
                     </div>
-                  )}
-                  {a.status === 'approved' && (
-                    <button className="btn btn-outline" style={{padding:'7px 16px',fontSize:12}} onClick={() => updateArtisan(a.id, 'suspended')}>Suspend</button>
-                  )}
-                </div>
-              ))}
-            </div>
+                    <StatusBadge status={a.status} />
+                    <div className="p-row-actions">
+                      {a.status !== 'approved' && (
+                        <button onClick={() => updateArtisanStatus(a.id,'approved')} style={{padding:'7px 16px',background:'var(--green)',color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'}}>Approve</button>
+                      )}
+                      {a.status !== 'rejected' && (
+                        <button onClick={() => updateArtisanStatus(a.id,'rejected')} style={{padding:'7px 16px',background:'var(--danger)',color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'}}>Reject</button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </>
           )}
 
           {/* PRODUCTS TAB */}
-          {!loading && tab === 'products' && (
-            <div>
-              {products.length === 0 ? (
-                <div className="panel-empty"><p>No products submitted yet</p></div>
-              ) : products.map(p => (
-                <div key={p.id} className="p-row" style={{flexWrap:'wrap',gap:12}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <p className="p-row-name">{p.name}</p>
-                    <p className="p-row-meta">{p.artisans?.shop_name} · {p.categories?.name} · {fmt(p.price)}</p>
-                  </div>
-                  <StatusBadge status={p.status} />
-                  {p.status === 'pending' && (
-                    <div style={{display:'flex',gap:8}}>
-                      <button className="btn btn-primary" style={{padding:'7px 16px',fontSize:12}} onClick={() => updateProduct(p.id, 'approved')}>Approve</button>
-                      <button className="btn btn-outline" style={{padding:'7px 16px',fontSize:12,color:'var(--danger)',borderColor:'var(--danger)'}} onClick={() => updateProduct(p.id, 'rejected')}>Reject</button>
+          {tab === 'products' && (
+            <>
+              {loading ? <div style={{textAlign:'center',padding:40}}><Spinner size={32} /></div> : products.length === 0 ? (
+                <div className="panel-empty"><p style={{fontSize:32,opacity:0.2}}>📦</p><p>No products yet</p><p>Products submitted by artisans will appear here</p></div>
+              ) : (
+                products.map(p => (
+                  <div key={p.id} className="p-row" style={{flexWrap:'wrap',gap:12}}>
+                    <div className="p-row-thumb">
+                      {p.img_url ? <img src={p.img_url} alt="" /> : <span style={{fontSize:20,opacity:0.22}}>🪑</span>}
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    <div className="p-row-info">
+                      <p className="p-row-name">{p.name}</p>
+                      <p className="p-row-meta">{p.artisans?.shop_name || p.artisan_name} · {p.category} · {fmt(p.price)}</p>
+                    </div>
+                    <StatusBadge status={p.status} />
+                    <div className="p-row-actions">
+                      {p.status !== 'approved' && (
+                        <button onClick={() => updateProductStatus(p.id,'approved')} style={{padding:'7px 16px',background:'var(--green)',color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'}}>Approve</button>
+                      )}
+                      {p.status !== 'rejected' && (
+                        <button onClick={() => updateProductStatus(p.id,'rejected')} style={{padding:'7px 16px',background:'var(--danger)',color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer'}}>Reject</button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </>
           )}
 
-          {/* OVERVIEW TAB */}
-          {!loading && tab === 'overview' && (
-            <div className="stat-grid">
-              {[['Total Artisans', artisans.length, ''],['Pending Approvals', pendingArtisans.length, ''],['Total Products', products.length, ''],['Pending Products', pendingProducts.length, '']].map(([label,value,change]) => (
-                <div key={label} className="stat-card"><p className="stat-label">{label}</p><p className="stat-value">{value}</p>{change && <p className="stat-change">{change}</p>}</div>
-              ))}
+          {/* ANALYTICS */}
+          {tab === 'analytics' && (
+            <div style={{textAlign:'center',padding:'48px 20px',color:'var(--muted)'}}>
+              <p style={{fontSize:32,opacity:0.2,marginBottom:16}}>📊</p>
+              <p style={{fontSize:16,fontWeight:500}}>Analytics coming soon</p>
+              <p style={{fontSize:13,marginTop:8}}>Revenue tracking, sales trends, and platform metrics</p>
             </div>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+
+/* ─────────────────────────────────────────────────────────
+   NAVIGATION
+   ───────────────────────────────────────────────────────── */
+
+function Navbar({ route, navigate, cartCount, user, artisan, onOpenAuth, onLogout }) {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const h = () => setScrolled(window.scrollY > 30);
+    window.addEventListener('scroll', h, { passive:true });
+    return () => window.removeEventListener('scroll', h);
+  }, []);
+
+  const isAdmin     = artisan?.role === 'admin' || user?.email === 'admin@katsinacrafts.com';
+  const isDashboard = route.startsWith('#/dashboard');
+  const isAdmin_r   = route.startsWith('#/admin');
+
+  return (
+    <nav className={`nav${scrolled?' scrolled':''}`}>
+      <div className="nav-inner">
+        <a href="#/" className="nav-logo">
+          <div className="nav-logo-icon">K</div>
+          <span className="nav-logo-text">Katsina<em>Crafts</em></span>
+        </a>
+
+        <div className="nav-links">
+          <a href="#/" className="nav-link">Shop</a>
+          <a href="#/" className="nav-link">Artisans</a>
+          <a href="#/" className="nav-link">Heritage</a>
+          <a href="#" className="nav-link">About</a>
+
+          {user ? (
+            <>
+              {isAdmin && <button className="btn btn-outline" style={{fontSize:12,padding:'8px 16px'}} onClick={() => navigate('#/admin')}>Admin Panel</button>}
+              <button className="btn btn-primary" onClick={() => navigate('#/dashboard')} style={{fontSize:12,padding:'8px 16px'}}>
+                <Icon.User /> My Shop
+              </button>
+              <button onClick={onLogout} style={{display:'flex',alignItems:'center',gap:6,color:'var(--warm-gray)',background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:500}}>
+                <Icon.LogOut /> Log out
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-outline" style={{fontSize:12,padding:'8px 16px'}} onClick={() => onOpenAuth('login')}>Log In</button>
+              <button className="btn btn-primary" onClick={() => onOpenAuth('signup')}>Sell on Katsina</button>
+            </>
+          )}
+
+          <span className="cart-icon">
+            <Icon.Bag />
+            <span className="cart-badge">{cartCount}</span>
+          </span>
+        </div>
+      </div>
+    </nav>
   );
 }
 
@@ -1127,19 +1074,19 @@ function Footer() {
               <div className="nav-logo-icon" style={{width:36,height:36,fontSize:18}}>K</div>
               <span className="nav-logo-text" style={{fontSize:20}}>Katsina<em>Crafts</em></span>
             </a>
-            <p className="footer-brand-desc">Celebrating Katsina's rich heritage through handcrafted furniture and home accessories.</p>
+            <p className="footer-brand-desc">Celebrating Katsina's rich heritage through handcrafted furniture and home accessories. Every piece tells a story.</p>
           </div>
           <div>
             <h4 className="footer-col-title">Shop</h4>
-            {['All Products','Chairs','Tables','Storage','Lighting'].map(l => <a key={l} href="#/" className="footer-link">{l}</a>)}
+            {['All Products','Chairs','Tables','Storage','Lighting','New Arrivals'].map(l => <a key={l} href="#/" className="footer-link">{l}</a>)}
           </div>
           <div>
             <h4 className="footer-col-title">Artisans</h4>
-            {['Join as Artisan','Artisan Directory','Success Stories'].map(l => <a key={l} href="#" className="footer-link">{l}</a>)}
+            {['Join as Artisan','Artisan Directory','Success Stories','Artisan FAQ'].map(l => <a key={l} href="#" className="footer-link">{l}</a>)}
           </div>
           <div>
             <h4 className="footer-col-title">Help</h4>
-            {['Contact Us','Shipping Info','Returns Policy','Track Order'].map(l => <a key={l} href="#" className="footer-link">{l}</a>)}
+            {['Contact Us','Shipping Info','Returns Policy','Size Guide','Track Order'].map(l => <a key={l} href="#" className="footer-link">{l}</a>)}
           </div>
         </div>
         <div className="footer-bottom">
@@ -1159,40 +1106,83 @@ function Footer() {
    ───────────────────────────────────────────────────────── */
 
 function App() {
-  const { route, navigate } = useHashRouter();
+  const { route, navigate }     = useHashRouter();
+  const [user, setUser]         = useState(null);
+  const [artisan, setArtisan]   = useState(null);
+  const [authMode, setAuthMode] = useState(null); // null | 'login' | 'signup'
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [cartCount, setCartCount] = useState(0);
-  const [authModal, setAuthModal] = useState(null); // 'login' | 'signup' | null
+  const [toast, setToast]       = useState(null);
 
-  const handleAddCart = () => setCartCount(c => c + 1);
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type, id: Date.now() });
+  }, []);
 
-  useEffect(() => { window.scrollTo(0, 0); }, [route]);
+  // Restore session on load
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        fetchArtisan(session.user.id);
+      }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) { setUser(session.user); fetchArtisan(session.user.id); }
+      else { setUser(null); setArtisan(null); }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
-  const isDashboard = route.startsWith('#/dashboard');
-  const isAdmin = route.startsWith('#/admin');
+  const fetchArtisan = async (userId) => {
+    const { data } = await supabase.from('artisans').select('*').eq('user_id', userId).single();
+    if (data) setArtisan(data);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null); setArtisan(null);
+    navigate('#/');
+    showToast('Logged out successfully');
+  };
+
+  const handleAuthSuccess = (u) => {
+    setUser(u);
+    fetchArtisan(u.id);
+  };
+
+  useEffect(() => { window.scrollTo(0,0); }, [route]);
+
+  const isAdmin = user?.email === 'admin@katsinacrafts.com';
 
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <Navbar route={route} navigate={navigate} cartCount={cartCount} onAuthClick={setAuthModal} />
+    <>
+      <Navbar
+        route={route} navigate={navigate} cartCount={cartCount}
+        user={user} artisan={artisan}
+        onOpenAuth={(mode) => setAuthMode(mode)}
+        onLogout={handleLogout}
+      />
 
-        {isAdmin ? (
-          <AdminPanel navigate={navigate} />
-        ) : isDashboard ? (
-          <Dashboard navigate={navigate} />
-        ) : (
-          <Storefront navigate={navigate} onSelectProduct={setSelectedProduct} onAddCart={handleAddCart} onAuthClick={setAuthModal} />
-        )}
+      {route.startsWith('#/admin') && isAdmin
+        ? <AdminPanel navigate={navigate} showToast={showToast} />
+        : route.startsWith('#/dashboard') && user && artisan
+        ? <ArtisanDashboard user={user} artisan={artisan} navigate={navigate} showToast={showToast} />
+        : route.startsWith('#/dashboard') && user && !artisan
+        ? <div style={{paddingTop:120,textAlign:'center',color:'var(--muted)'}}><Spinner size={36} /><p style={{marginTop:16}}>Loading your profile...</p></div>
+        : route.startsWith('#/dashboard') && !user
+        ? (() => { navigate('#/'); setAuthMode('login'); return null; })()
+        : <Storefront onSelectProduct={setSelectedProduct} onAddCart={() => setCartCount(c=>c+1)} navigate={navigate} onOpenAuth={setAuthMode} />
+      }
 
-        <Footer />
+      <Footer />
 
-        {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onAddCart={handleAddCart} />}
-        {authModal && <AuthModal onClose={() => setAuthModal(null)} initialMode={authModal} />}
-      </ToastProvider>
-    </AuthProvider>
+      {selectedProduct && <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)} onAddCart={() => setCartCount(c=>c+1)} />}
+
+      {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} onSuccess={handleAuthSuccess} showToast={showToast} />}
+
+      {toast && <Toast key={toast.id} message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </>
   );
 }
 
-
-/* ── MOUNT ─────────────────────────────────────────────── */
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
